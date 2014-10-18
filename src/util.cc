@@ -22,10 +22,17 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "util.h"
+#include "aead.h"
 
 static const char b32[]="ybndrfg8ejkmcpqxot1uwisza345h769";
+
+using namespace hpenc;
 
 std::string
 hpenc::util::base32Encode(unsigned char *input, size_t len)
@@ -82,4 +89,26 @@ hpenc::util::base32Encode(unsigned char *input, size_t len)
 		result[r++] = b32[remain];
 
 	return result;
+}
+
+static const char *randomdev = "/dev/urandom";
+
+std::unique_ptr<SessionKey>
+hpenc::util::genPSK(AeadAlgorithm alg)
+{
+	unsigned len = AeadKeyLengths[static_cast<int>(alg)];
+
+	auto res = util::make_unique<SessionKey>();
+	res->resize(len);
+
+	auto fd = ::open(randomdev, O_RDONLY);
+	if (fd == -1) {
+		return nullptr;
+	}
+
+	if (::read(fd, res->data(), res->size()) == -1) {
+		return nullptr;
+	}
+
+	return std::move(res);
 }

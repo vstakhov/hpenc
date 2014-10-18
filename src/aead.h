@@ -39,6 +39,12 @@ enum class AeadAlgorithm {
 	CHACHA20_POLY_1305
 };
 
+static const int AeadKeyLengths[] = {
+	16,	// AES_GCM_128
+	32, // AES_GCM_256
+	32 // CHACHA20_POLY1305
+};
+
 /*
  * Authenticated encryption with additional data
  */
@@ -85,8 +91,7 @@ public:
 			const MacTag *tag,
 			byte *out);
 	size_t taglen() const;
-
-
+	size_t keylen() const;
 };
 
 } /* namespace penc */

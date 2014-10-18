@@ -27,6 +27,7 @@
 
 #include <memory>
 #include <string>
+#include "aead.h"
 
 namespace hpenc {
 
@@ -35,10 +36,12 @@ namespace util {
 std::string base32Encode(unsigned char *in, size_t inlen);
 
 template<typename T, typename ...Args>
-::std::unique_ptr<T> make_unique( Args&& ...args )
+::std::unique_ptr<T> make_unique(Args&& ...args)
 {
-    return ::std::unique_ptr<T>( new T( std::forward<Args>(args)... ) );
+    return ::std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
+
+std::unique_ptr<SessionKey> genPSK(AeadAlgorithm alg);
 
 } // util namespace
 
