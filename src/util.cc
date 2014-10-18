@@ -22,10 +22,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
+
+#include <fstream>
+#include <iostream>
 
 #include "util.h"
 #include "aead.h"
@@ -101,12 +100,18 @@ hpenc::util::genPSK(AeadAlgorithm alg)
 	auto res = util::make_unique<SessionKey>();
 	res->resize(len);
 
-	auto fd = ::open(randomdev, O_RDONLY);
-	if (fd == -1) {
+	std::basic_fstream<byte> rnd;
+
+	rnd.open(randomdev, std::ios::in | std::ios::binary);
+
+	if (!rnd.is_open()) {
 		return nullptr;
 	}
 
-	if (::read(fd, res->data(), res->size()) == -1) {
+	try {
+		rnd.read(res->data(), res->size());
+	}
+	catch (const std::ios_base::failure& e) {
 		return nullptr;
 	}
 
