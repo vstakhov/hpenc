@@ -36,15 +36,13 @@ namespace hpenc
 class AeadCipher
 {
 protected:
-	SessionKey key;
+	std::unique_ptr<SessionKey> key;
 public:
-	AeadCipher(const SessionKey &_key) :
-			key(_key)
-	{
-	}
-	virtual ~AeadCipher()
-	{
-	}
+	AeadCipher() {}
+	virtual ~AeadCipher() {}
+
+	virtual bool hasKey() const { return !!key; }
+	virtual void setKey(std::unique_ptr<SessionKey> &&_key) { key.swap(_key); }
 
 	virtual std::unique_ptr<MacTag> encrypt(const byte *aad, size_t aadlen,
 			const byte *nonce, size_t nlen, const byte *in, size_t inlen,
@@ -60,6 +58,10 @@ public:
 	{
 		return 0;
 	}
+	virtual size_t noncelen() const
+	{
+		return 0;
+	}
 };
 
 class OpenSSLAeadCipher: public AeadCipher
@@ -70,8 +72,7 @@ private:
 	const EVP_CIPHER *alg;
 	AeadAlgorithm alg_num;
 public:
-	OpenSSLAeadCipher(const SessionKey &key, AeadAlgorithm _alg) :
-			AeadCipher(key)
+	OpenSSLAeadCipher(AeadAlgorithm _alg) : AeadCipher()
 	{
 		ctx_enc.reset(EVP_CIPHER_CTX_new());
 		ctx_dec.reset(EVP_CIPHER_CTX_new());
@@ -102,7 +103,7 @@ public:
 
 		// Set nonce length
 		EVP_CIPHER_CTX_ctrl(ctx_ptr, EVP_CTRL_GCM_SET_IVLEN, nlen, NULL);
-		EVP_EncryptInit_ex(ctx_ptr, NULL, NULL, key.data(),
+		EVP_EncryptInit_ex(ctx_ptr, NULL, NULL, key->data(),
 				(const unsigned char*) nonce);
 		if (aadlen > 0) {
 			// Add unencrypted data
@@ -128,7 +129,7 @@ public:
 		auto ctx_ptr = ctx_enc.get();
 		// Set nonce and key
 		EVP_CIPHER_CTX_ctrl(ctx_ptr, EVP_CTRL_GCM_SET_IVLEN, nlen, NULL);
-		EVP_EncryptInit_ex(ctx_ptr, NULL, NULL, key.data(),
+		EVP_EncryptInit_ex(ctx_ptr, NULL, NULL, key->data(),
 				(const unsigned char*) nonce);
 
 		// Set tag
@@ -162,13 +163,17 @@ public:
 			return 0;
 		}
 	}
+
+	virtual size_t noncelen() const override
+	{
+		return 8;
+	}
 };
 
 class Chacha20Poly1305AeadCipher: public AeadCipher
 {
 private:
 	crypto_onetimeauth_poly1305_state state;
-	SessionKey k;
 
 	static inline void _u64_le_from_ull(unsigned char out[8U],
 			unsigned long long x)
@@ -190,8 +195,8 @@ private:
 		out[7] = (unsigned char) (x & 0xff);
 	}
 public:
-	Chacha20Poly1305AeadCipher(const SessionKey &key, AeadAlgorithm _alg) :
-			AeadCipher (key), k(key)
+	Chacha20Poly1305AeadCipher(AeadAlgorithm _alg) :
+			AeadCipher()
 	{
 	}
 
@@ -205,7 +210,7 @@ public:
 		byte slen[8];
 
 		// Set poly1305 key
-		crypto_stream_chacha20(block0, sizeof block0, nonce, k.data());
+		crypto_stream_chacha20(block0, sizeof block0, nonce, key->data());
 		crypto_onetimeauth_poly1305_init(&state, block0);
 		sodium_memzero(block0, sizeof block0);
 
@@ -216,7 +221,7 @@ public:
 			crypto_onetimeauth_poly1305_update(&state, slen, sizeof slen);
 		}
 		// Encrypt
-		crypto_stream_chacha20_xor_ic(out, in, inlen, nonce, 1U, k.data());
+		crypto_stream_chacha20_xor_ic(out, in, inlen, nonce, 1U, key->data());
 		// Final tag
 		crypto_onetimeauth_poly1305_update(&state, out, inlen);
 		_u64_le_from_ull(slen, inlen);
@@ -236,7 +241,7 @@ public:
 		auto test_tag = util::make_unique < MacTag >(taglen());
 
 		// Set poly1305 key
-		crypto_stream_chacha20(block0, sizeof block0, nonce, k.data());
+		crypto_stream_chacha20(block0, sizeof block0, nonce, key->data());
 		crypto_onetimeauth_poly1305_init(&state, block0);
 		sodium_memzero(block0, sizeof block0);
 
@@ -257,7 +262,7 @@ public:
 			return false;
 		}
 
-		crypto_stream_chacha20_xor_ic(out, in, inlen, nonce, 1U, k.data());
+		crypto_stream_chacha20_xor_ic(out, in, inlen, nonce, 1U, key->data());
 
 		return true;
 	}
@@ -269,7 +274,12 @@ public:
 	}
 	virtual size_t keylen() const override
 	{
-		return 256 / 8;
+		return crypto_stream_chacha20_keybytes();
+	}
+
+	virtual size_t noncelen() const override
+	{
+		return crypto_stream_chacha20_noncebytes();
 	}
 };
 
@@ -278,14 +288,14 @@ class HPencAead::impl
 public:
 	std::unique_ptr<AeadCipher> cipher;
 
-	impl(const SessionKey &key, AeadAlgorithm alg)
+	impl(AeadAlgorithm alg)
 	{
 		if (alg == AeadAlgorithm::AES_GCM_128
 				|| alg == AeadAlgorithm::AES_GCM_256) {
-			cipher.reset(new OpenSSLAeadCipher(key, alg));
+			cipher.reset(new OpenSSLAeadCipher(alg));
 		}
 		else if (alg == AeadAlgorithm::CHACHA20_POLY_1305) {
-			cipher.reset(new Chacha20Poly1305AeadCipher(key, alg));
+			cipher.reset(new Chacha20Poly1305AeadCipher(alg));
 		}
 	}
 
@@ -294,22 +304,26 @@ public:
 	}
 };
 
-HPencAead::HPencAead(const SessionKey &key, AeadAlgorithm alg) :
-		pimpl(new impl(key, alg))
+HPencAead::HPencAead(AeadAlgorithm alg) :
+		pimpl(new impl(alg))
 {
-	// TODO Auto-generated constructor stub
-
 }
 
 HPencAead::~HPencAead()
 {
-	// TODO Auto-generated destructor stub
+}
+
+void HPencAead::setKey(std::unique_ptr<SessionKey> &&sk)
+{
+	if (pimpl->cipher) {
+		pimpl->cipher->setKey(std::move(sk));
+	}
 }
 
 std::unique_ptr<MacTag> HPencAead::encrypt(const byte *aad, size_t aadlen,
 		const byte *nonce, size_t nlen, const byte *in, size_t inlen, byte *out)
 {
-	if (!pimpl->cipher) {
+	if (!pimpl->cipher || !pimpl->cipher->hasKey()) {
 		return nullptr;
 	}
 
@@ -319,7 +333,7 @@ std::unique_ptr<MacTag> HPencAead::encrypt(const byte *aad, size_t aadlen,
 bool HPencAead::decrypt(const byte *aad, size_t aadlen, const byte *nonce,
 		size_t nlen, const byte *in, size_t inlen, const MacTag *tag, byte *out)
 {
-	if (!pimpl->cipher) {
+	if (!pimpl->cipher || !pimpl->cipher->hasKey()) {
 		return false;
 	}
 
@@ -343,6 +357,15 @@ size_t HPencAead::keylen() const
 	}
 
 	return pimpl->cipher->keylen();
+}
+
+size_t HPencAead::noncelen() const
+{
+	if (!pimpl->cipher) {
+		return 0;
+	}
+
+	return pimpl->cipher->noncelen();
 }
 
 } /* namespace shush */

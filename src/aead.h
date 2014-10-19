@@ -76,10 +76,10 @@ private:
 	class impl;
 	std::unique_ptr<impl> pimpl;
 public:
-	explicit HPencAead(const SessionKey &key,
-			AeadAlgorithm alg = AeadAlgorithm::AES_GCM_128);
+	explicit HPencAead(AeadAlgorithm alg = AeadAlgorithm::AES_GCM_128);
 	virtual ~HPencAead();
 
+	void setKey(std::unique_ptr<SessionKey> &&sk);
 	virtual std::unique_ptr<MacTag> encrypt(const byte *aad, size_t aadlen,
 			const byte *nonce, size_t nlen,
 			const byte *in, size_t inlen,
@@ -92,6 +92,7 @@ public:
 			byte *out);
 	size_t taglen() const;
 	size_t keylen() const;
+	size_t noncelen() const;
 };
 
 } /* namespace penc */
