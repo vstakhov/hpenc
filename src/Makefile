@@ -1,5 +1,5 @@
-CFLAGS?=	-O2 -g -std=c99
-CXXFLAGS?=	-std=c++11 -I../sodium -g
+CFLAGS?=	-Wall -O2 -g -std=c99
+CXXFLAGS?=	-Wall -std=c++11 -I../sodium -g
 CC?=	cc
 CXX?=	c++
 AR?=	ar
@@ -8,11 +8,13 @@ LIBS?=	-lcrypto -lsodium_contrib
 LDFLAGS?=	-L../sodium
 
 DEPS=	aead.h \
-	util.h
+	util.h \
+	nonce.h
 	
 OBJS=	aead.o \
 	util.o \
-	main.o
+	main.o \
+	nonce.o
 	
 all: hpenc
 
@@ -27,6 +29,9 @@ util.o: util.cc $(DEPS)
 
 main.o: main.cc $(DEPS)
 	$(CXX) $(CXXFLAGS) -c main.cc -o main.o
+
+nonce.o: nonce.cc $(DEPS)
+	$(CXX) $(CXXFLAGS) -c nonce.cc -o nonce.o
 
 clean:
 	rm $(OBJS) hpenc || true
