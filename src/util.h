@@ -33,7 +33,7 @@ namespace hpenc {
 
 namespace util {
 
-std::string base32Encode(unsigned char *in, size_t inlen);
+std::string base32EncodeKey(const SessionKey *in);
 
 template<typename T, typename ...Args>
 ::std::unique_ptr<T> make_unique(Args&& ...args)

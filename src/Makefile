@@ -11,7 +11,8 @@ DEPS=	aead.h \
 	util.h
 	
 OBJS=	aead.o \
-	util.o
+	util.o \
+	main.o
 	
 all: hpenc
 
@@ -23,6 +24,9 @@ aead.o: aead.cc $(DEPS)
 
 util.o: util.cc $(DEPS)
 	$(CXX) $(CXXFLAGS) -c util.cc -o util.o
+
+main.o: main.cc $(DEPS)
+	$(CXX) $(CXXFLAGS) -c main.cc -o main.o
 
 clean:
 	rm $(OBJS) hpenc || true

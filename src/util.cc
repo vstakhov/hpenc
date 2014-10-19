@@ -23,9 +23,10 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <fstream>
-#include <iostream>
-
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "util.h"
 #include "aead.h"
 
@@ -34,14 +35,16 @@ static const char b32[]="ybndrfg8ejkmcpqxot1uwisza345h769";
 using namespace hpenc;
 
 std::string
-hpenc::util::base32Encode(unsigned char *input, size_t len)
+hpenc::util::base32EncodeKey(const SessionKey *in)
 {
 	unsigned int i, r, x;
+	auto input = in->data();
+	auto len = in->size();
 
 	int remain = -1;
 	std::string result;
 
-	result.reserve(len * 8 / 5 + 1);
+	result.resize(len * 8 / 5 + 1);
 
 	for (i = 0, r = 0; i < len; i++) {
 		switch (i % 5) {
@@ -100,20 +103,17 @@ hpenc::util::genPSK(AeadAlgorithm alg)
 	auto res = util::make_unique<SessionKey>();
 	res->resize(len);
 
-	std::basic_fstream<byte> rnd;
+	auto rnd = open(randomdev, O_RDONLY);
 
-	rnd.open(randomdev, std::ios::in | std::ios::binary);
-
-	if (!rnd.is_open()) {
+	if (rnd == -1) {
+		return nullptr;
+	}
+	if (::read(rnd, res->data(), len) == -1) {
+		::close(rnd);
 		return nullptr;
 	}
 
-	try {
-		rnd.read(res->data(), res->size());
-	}
-	catch (const std::ios_base::failure& e) {
-		return nullptr;
-	}
+	::close(rnd);
 
 	return std::move(res);
 }
