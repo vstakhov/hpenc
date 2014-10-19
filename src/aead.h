@@ -26,25 +26,10 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include "common.h"
 
 namespace hpenc
 {
-
-using byte = unsigned char;
-using SessionKey = std::vector<byte>;
-
-enum class AeadAlgorithm {
-	AES_GCM_128 = 0,
-	AES_GCM_256,
-	CHACHA20_POLY_1305
-};
-
-static const int AeadKeyLengths[] = {
-	16,	// AES_GCM_128
-	32, // AES_GCM_256
-	32 // CHACHA20_POLY1305
-};
-
 /*
  * Authenticated encryption with additional data
  */

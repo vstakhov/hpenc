@@ -22,28 +22,43 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef KDF_H_
-#define KDF_H_
+#ifndef COMMON_H_
+#define COMMON_H_
 
 #include <memory>
 #include <vector>
-#include "common.h"
 
-namespace hpenc
-{
+namespace hpenc {
 
-class HPEncKDF
-{
-private:
-	class impl;
-	std::unique_ptr<impl> pimpl;
-public:
-	explicit HPEncKDF(std::unique_ptr<SessionKey> &&psk);
-	virtual ~HPEncKDF();
+using byte = unsigned char;
+using SessionKey = std::vector<byte>;
 
-	std::unique_ptr<SessionKey> genKey(unsigned keylen);
+enum class AeadAlgorithm {
+	AES_GCM_128 = 0,
+	AES_GCM_256,
+	CHACHA20_POLY_1305
 };
 
-} /* namespace hpenc */
+static const int AeadKeyLengths[] = {
+	16,	// AES_GCM_128
+	32, // AES_GCM_256
+	32 // CHACHA20_POLY1305
+};
 
-#endif /* KDF_H_ */
+// Maximum is 16 megabytes block
+const unsigned max_block = 16 * 1024 * 1024;
+
+struct HPEncHeader {
+	AeadAlgorithm alg;
+	unsigned blen;
+
+	HPEncHeader(AeadAlgorithm _alg, unsigned _blen) : alg(_alg), blen(_blen) {}
+	bool toFd(int fd);
+
+	static std::unique_ptr<HPEncHeader> fromFd(int fd);
+};
+
+}
+
+
+#endif /* COMMON_H_ */

@@ -27,6 +27,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <arpa/inet.h>
+#include <cstring>
 #include "util.h"
 #include "aead.h"
 
@@ -114,6 +116,54 @@ hpenc::util::genPSK(AeadAlgorithm alg)
 	}
 
 	::close(rnd);
+
+	return std::move(res);
+}
+
+struct HeaderWire {
+	char magic[8];
+	uint32_t alg;
+	uint32_t blocklen;
+};
+
+static const char header_magic[8] = { 'h', 'p', 'e', 'n', 'c', 0, 0, 0 };
+
+bool hpenc::HPEncHeader::toFd(int fd)
+{
+	HeaderWire out;
+
+	if (fd == -1) {
+		return false;
+	}
+
+	::memcpy(out.magic, header_magic, sizeof(out.magic));
+	out.alg = htonl(static_cast<int>(alg));
+	out.blocklen = htonl(blen);
+
+	return (::write(fd, &out, sizeof(out)) == sizeof(out));
+}
+
+struct std::unique_ptr<HPEncHeader> hpenc::HPEncHeader::fromFd(int fd)
+{
+	HeaderWire in;
+
+	if (fd == -1 || ::read(fd, &in, sizeof(in)) != sizeof(in)) {
+		return nullptr;
+	}
+
+	if (::memcmp(in.magic, header_magic, sizeof(in.magic)) != 0) {
+		return nullptr;
+	}
+
+
+	auto alg = static_cast<AeadAlgorithm>(in.alg);
+	auto blen = ntohl(in.blocklen);
+	if (blen > max_block) {
+		// Disallow too large blocks
+		return nullptr;
+	}
+
+	auto res = util::make_unique<HPEncHeader>(alg, blen);
 
 	return std::move(res);
 }

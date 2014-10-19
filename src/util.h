@@ -27,7 +27,7 @@
 
 #include <memory>
 #include <string>
-#include "aead.h"
+#include "common.h"
 
 namespace hpenc {
 

@@ -8,6 +8,7 @@ LIBS?=	-lcrypto -lsodium_contrib
 LDFLAGS?=	-L../sodium
 
 DEPS=	aead.h \
+	common.h \
 	util.h \
 	nonce.h
 	
