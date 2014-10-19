@@ -14,7 +14,8 @@ DEPS=	aead.h \
 OBJS=	aead.o \
 	util.o \
 	main.o \
-	nonce.o
+	nonce.o \
+	kdf.o
 	
 all: hpenc
 
@@ -32,6 +33,9 @@ main.o: main.cc $(DEPS)
 
 nonce.o: nonce.cc $(DEPS)
 	$(CXX) $(CXXFLAGS) -c nonce.cc -o nonce.o
+
+kdf.o: kdf.cc $(DEPS)
+	$(CXX) $(CXXFLAGS) -c kdf.cc -o kdf.o
 
 clean:
 	rm $(OBJS) hpenc || true

@@ -98,7 +98,7 @@ static const char *randomdev = "/dev/urandom";
 std::unique_ptr<SessionKey>
 hpenc::util::genPSK(AeadAlgorithm alg)
 {
-	unsigned len = AeadKeyLengths[static_cast<int>(alg)];
+	unsigned len = AeadKeyLengths[static_cast<int>(AeadAlgorithm::CHACHA20_POLY_1305)];
 
 	auto res = util::make_unique<SessionKey>();
 	res->resize(len);
