@@ -56,8 +56,10 @@ int main(int argc, char **argv)
 {
 	AeadAlgorithm alg = AeadAlgorithm::AES_GCM_128;
 	char opt;
+	unsigned block_size = 4096;
+	char *err_str;
 
-	while ((opt = ::getopt(argc, argv, "ha:")) != -1) {
+	while ((opt = ::getopt(argc, argv, "ha:b:")) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv);
@@ -65,6 +67,23 @@ int main(int argc, char **argv)
 		case 'a':
 			alg = parseAlg(optarg);
 			break;
+		case 'b':
+			block_size = ::strtoul(optarg, &err_str, 10);
+			if (err_str && *err_str != '\0') {
+				switch (*err_str) {
+				case 'K':
+				case 'k':
+					block_size *= 1024;
+					break;
+				case 'M':
+				case 'm':
+					block_size *= 1024 * 1024;
+					break;
+				default:
+					usage(argv);
+					break;
+				}
+			}
 		}
 	}
 
@@ -78,7 +97,7 @@ int main(int argc, char **argv)
 
 	auto kdf = util::make_unique<HPEncKDF>(std::move(psk));
 	auto encrypter = util::make_unique<HPEncEncrypt>(std::move(kdf), "", "", alg,
-			4096);
+			block_size);
 
 	encrypter->encrypt();
 
