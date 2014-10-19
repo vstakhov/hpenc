@@ -22,65 +22,34 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef ENCRYPT_H_
+#define ENCRYPT_H_
 
-#include "util.h"
-#include "encrypt.h"
-#include "kdf.h"
-#include <unistd.h>
-#include <iostream>
-#include <cstdlib>
+#include <memory>
+#include <string>
+#include "common.h"
 
-using namespace hpenc;
-
-static void usage(char **argv)
+namespace hpenc
 {
-	std::cerr 	<< "Usage: " << argv[0] << " [-h] [-a algorithm] [-k key] [psk]"
-				<< std::endl;
-	::exit(EXIT_FAILURE);
-}
 
-static AeadAlgorithm
-parseAlg(const std::string &arg)
+class HPEncKDF;
+
+class HPEncEncrypt
 {
-	if (arg.find("chacha") != std::string::npos) {
-		return AeadAlgorithm::CHACHA20_POLY_1305;
-	}
-	else if (arg.find("256") != std::string::npos) {
-		return AeadAlgorithm::AES_GCM_256;
-	}
+private:
+	class impl;
+	std::unique_ptr<impl> pimpl;
+public:
+	HPEncEncrypt(std::unique_ptr<HPEncKDF> &&kdf,
+			const std::string &in,
+			const std::string &out,
+			AeadAlgorithm alg,
+			unsigned block_size);
+	virtual ~HPEncEncrypt();
 
-	return AeadAlgorithm::AES_GCM_128;
-}
+	void encrypt();
+};
 
-int main(int argc, char **argv)
-{
-	AeadAlgorithm alg = AeadAlgorithm::AES_GCM_128;
-	char opt;
+} /* namespace hpenc */
 
-	while ((opt = ::getopt(argc, argv, "ha:")) != -1) {
-		switch (opt) {
-		case 'h':
-			usage(argv);
-			break;
-		case 'a':
-			alg = parseAlg(optarg);
-			break;
-		}
-	}
-
-	argv += optind;
-	argc -= optind;
-
-	auto psk = util::genPSK(alg);
-	if (argc == 1 && std::string(argv[0]).find("psk") != std::string::npos) {
-		std::cout << util::base32EncodeKey(psk.get()) << std::endl;
-	}
-
-	auto kdf = util::make_unique<HPEncKDF>(std::move(psk));
-	auto encrypter = util::make_unique<HPEncEncrypt>(std::move(kdf), "", "", alg,
-			4096);
-
-	encrypter->encrypt();
-
-	return 0;
-}
+#endif /* ENCRYPT_H_ */

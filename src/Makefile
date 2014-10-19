@@ -10,13 +10,15 @@ LDFLAGS?=	-L../sodium
 DEPS=	aead.h \
 	common.h \
 	util.h \
-	nonce.h
+	nonce.h \
+	encrypt.h
 	
 OBJS=	aead.o \
 	util.o \
 	main.o \
 	nonce.o \
-	kdf.o
+	kdf.o \
+	encrypt.o
 	
 all: hpenc
 
@@ -37,6 +39,9 @@ nonce.o: nonce.cc $(DEPS)
 
 kdf.o: kdf.cc $(DEPS)
 	$(CXX) $(CXXFLAGS) -c kdf.cc -o kdf.o
+
+encrypt.o: encrypt.cc $(DEPS)
+	$(CXX) $(CXXFLAGS) -c encrypt.cc -o encrypt.o
 
 clean:
 	rm $(OBJS) hpenc || true
