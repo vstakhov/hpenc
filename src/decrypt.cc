@@ -47,7 +47,7 @@ public:
 	std::unique_ptr<HPEncNonce> nonce;
 	int fd_in, fd_out;
 	unsigned block_size;
-	std::vector<std::vector<byte> > io_bufs;
+	std::vector<std::shared_ptr <std::vector<byte> > > io_bufs;
 	std::vector <std::shared_ptr<HPencAead> > ciphers;
 	bool encode;
 	std::unique_ptr<ThreadPool> pool;
@@ -111,27 +111,21 @@ public:
 				nonce.reset(new HPEncNonce(cipher->noncelen()));
 			}
 			ciphers.push_back(cipher);
-			io_bufs[i].resize(block_size + cipher->taglen());
+			io_bufs[i] = std::make_shared<std::vector<byte> >();
+			io_bufs[i]->resize(block_size + cipher->taglen());
 		}
 
 		return true;
 	}
 
-	bool writeBlock(ssize_t rd, std::vector<byte> &io_buf)
+	bool writeBlock(ssize_t rd, std::vector<byte> *io_buf)
 	{
-		if (rd > 0) {
-			if (::write(fd_out, io_buf.data(), rd) == -1) {
-					return false;
-			}
-			return rd == block_size;
-		}
-		return false;
+		return ::write(fd_out, io_buf->data(), rd) != -1;
 	}
 
-	ssize_t readBlock(std::vector<byte> &io_buf,
+	ssize_t readBlock(ssize_t rd, std::vector<byte> *io_buf,
 			const std::vector<byte> &n, std::shared_ptr<HPencAead> const &cipher)
 	{
-		auto rd = ::read(fd_in, io_buf.data(), block_size + cipher->taglen());
 		if (rd > 0) {
 			auto datalen = rd - cipher->taglen();
 			MacTag tag;
@@ -141,12 +135,12 @@ public:
 				throw std::runtime_error("Truncated input, cannot read MAC tag");
 			}
 
-			tag.data = io_buf.data() + datalen;
+			tag.data = io_buf->data() + datalen;
 			tag.datalen = cipher->taglen();
 
 			if (!cipher->decrypt(reinterpret_cast<byte *>(&bs), sizeof(bs),
-					n.data(), n.size(), io_buf.data(), datalen,
-					&tag, io_buf.data())) {
+					n.data(), n.size(), io_buf->data(), datalen,
+					&tag, io_buf->data())) {
 				throw std::runtime_error("Verification failed");
 			}
 
@@ -172,6 +166,8 @@ HPEncDecrypt::~HPEncDecrypt()
 void HPEncDecrypt::decrypt(bool encode) throw(std::runtime_error)
 {
 	pimpl->encode = encode;
+	bool last = false;
+
 	if (pimpl->readHeader()) {
 		auto nblocks = 0U;
 		for (;;) {
@@ -179,13 +175,29 @@ void HPEncDecrypt::decrypt(bool encode) throw(std::runtime_error)
 			std::vector< std::future<ssize_t> > results;
 			auto i = 0U;
 			for (auto &buf : pimpl->io_bufs) {
-				auto n = pimpl->nonce->incAndGet();
-				results.emplace_back(
-						pimpl->pool->enqueue(
-								&impl::readBlock, pimpl.get(), buf, n,
-								pimpl->ciphers[i]
-				));
-				blocks_read ++;
+
+				auto rd = ::read(pimpl->fd_in,
+						buf->data(),
+						pimpl->block_size + pimpl->ciphers[0]->taglen());
+				if (rd > 0) {
+					auto n = pimpl->nonce->incAndGet();
+					results.emplace_back(
+							pimpl->pool->enqueue(
+									&impl::readBlock, pimpl.get(),
+									rd, buf.get(), n,
+									pimpl->ciphers[i]
+							));
+					blocks_read ++;
+					if (rd < pimpl->block_size) {
+						// Last block
+						last = true;
+						break;
+					}
+				}
+				else {
+					last = true;
+					break;
+				}
 				i ++;
 			}
 
@@ -197,14 +209,15 @@ void HPEncDecrypt::decrypt(bool encode) throw(std::runtime_error)
 					throw std::runtime_error("Cannot decrypt block");
 				}
 				if (rd > 0) {
-					if (!pimpl->writeBlock(rd, pimpl->io_bufs[i])) {
+					if (!pimpl->writeBlock(rd, pimpl->io_bufs[i].get())) {
 						throw std::runtime_error("Write error");
 					}
 				}
-				else {
-					break;
-				}
+
 				i ++;
+			}
+			if (last) {
+				return;
 			}
 			if (++nblocks % rekey_blocks == 0) {
 				// Rekey all cipers

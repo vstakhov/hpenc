@@ -48,7 +48,7 @@ public:
 	std::unique_ptr<HPEncNonce> nonce;
 	int fd_in, fd_out;
 	unsigned block_size;
-	std::vector<std::vector<byte> > io_bufs;
+	std::vector<std::shared_ptr<std::vector<byte> > > io_bufs;
 	HPEncHeader hdr;
 	bool encode;
 	std::unique_ptr<ThreadPool> pool;
@@ -97,7 +97,8 @@ public:
 				nonce.reset(new HPEncNonce(cipher->noncelen()));
 			}
 			ciphers.push_back(cipher);
-			io_bufs[i].resize(block_size + cipher->taglen());
+			io_bufs[i] = std::make_shared<std::vector<byte> >();
+			io_bufs[i]->resize(block_size + ciphers[0]->taglen());
 		}
 	}
 
@@ -112,39 +113,29 @@ public:
 		return hdr.toFd(fd_out, encode);
 	}
 
-	bool writeBlock(ssize_t rd, std::vector<byte> &io_buf,
+	ssize_t writeBlock(ssize_t rd, std::vector<byte> *io_buf,
 			const std::vector<byte> &n, std::shared_ptr<HPencAead> const &cipher)
 	{
 		if (rd > 0) {
 			auto bs = htonl(rd);
 			auto tag = cipher->encrypt(reinterpret_cast<byte *>(&bs), sizeof(bs),
-					n.data(), n.size(), io_buf.data(), rd, io_buf.data());
+					n.data(), n.size(), io_buf->data(), rd, io_buf->data());
 
 			if (!tag) {
-				return false;
+				return -1;
 			}
 
-			auto mac_pos = io_buf.data() + rd;
+			auto mac_pos = io_buf->data() + rd;
 			std::copy(tag->data, tag->data + tag->datalen, mac_pos);
-			if (encode) {
-				auto b64_out = util::base64Encode(io_buf.data(), rd + tag->datalen);
-				if (::write(fd_out, b64_out.data(), b64_out.size()) == -1) {
-					return false;
-				}
-			}
-			else {
-				if (::write(fd_out, io_buf.data(), rd + tag->datalen) == -1) {
-					return false;
-				}
-			}
-			return rd == block_size;
+
+			return rd;
 		}
-		return false;
+		return -1;
 	}
 
-	ssize_t readBlock(std::vector<byte> &io_buf)
+	ssize_t readBlock(std::vector<byte> *io_buf)
 	{
-		return ::read(fd_in, io_buf.data(), block_size);
+		return ::read(fd_in, io_buf->data(), block_size);
 	}
 };
 
@@ -169,28 +160,54 @@ void HPEncEncrypt::encrypt(bool encode)
 		auto nblocks = 0U;
 		for (;;) {
 			auto blocks_read = 0;
-			std::vector< std::future<bool> > results;
+			std::vector< std::future<ssize_t> > results;
 			auto i = 0U;
 			for (auto &buf : pimpl->io_bufs) {
-				auto rd = pimpl->readBlock(buf);
+				auto rd = pimpl->readBlock(buf.get());
 
 				if (rd > 0) {
 					auto n = pimpl->nonce->incAndGet();
 					results.emplace_back(
 							pimpl->pool->enqueue(
-								&impl::writeBlock, pimpl.get(), rd, buf, n,
-								pimpl->ciphers[i]
+								&impl::writeBlock, pimpl.get(), rd, buf.get(),
+								n, pimpl->ciphers[i]
 							));
 					blocks_read ++;
 				}
 				i ++;
 			}
 
+			i = 0;
 			for(auto && result: results) {
 				result.wait();
-				if (!result.get()) {
+				auto rd = result.get();
+				if (rd == -1) {
 					throw std::runtime_error("Cannot encrypt block");
 				}
+				else {
+					if (rd > 0) {
+						const auto &io_buf = pimpl->io_bufs[i].get();
+						if (encode) {
+							auto b64_out = util::base64Encode(io_buf->data(), rd +
+									pimpl->ciphers[i]->taglen());
+							if (::write(pimpl->fd_out, b64_out.data(),
+									b64_out.size()) == -1) {
+								throw std::runtime_error("Cannot write encrypted block");
+							}
+						}
+						else {
+							if (::write(pimpl->fd_out, io_buf->data(),
+									rd + pimpl->ciphers[i]->taglen()) == -1) {
+								throw std::runtime_error("Cannot write encrypted block");
+							}
+						}
+					}
+					if (rd < pimpl->block_size) {
+						// We are done
+						return;
+					}
+				}
+				i++;
 			}
 
 			if (++nblocks % rekey_blocks == 0) {
