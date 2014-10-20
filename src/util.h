@@ -34,6 +34,7 @@ namespace hpenc {
 namespace util {
 
 std::string base32EncodeKey(const SessionKey *in);
+std::unique_ptr<SessionKey> base32DecodeKey(const std::string &in);
 
 template<typename T, typename ...Args>
 ::std::unique_ptr<T> make_unique(Args&& ...args)
