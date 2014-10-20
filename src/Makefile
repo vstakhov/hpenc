@@ -6,13 +6,15 @@ CXX?=	c++
 AR?=	ar
 ARFLAGS?=	rcs
 LIBS?=	-lcrypto -lsodium_contrib
-LDFLAGS?=	-L../sodium
+LDFLAGS?=	-L../sodium -pthread
 
 DEPS=	aead.h \
 	common.h \
 	util.h \
 	nonce.h \
-	encrypt.h
+	encrypt.h \
+	decrypt.h \
+	thread_pool.h
 	
 OBJS=	aead.o \
 	util.o \

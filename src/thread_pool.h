@@ -39,8 +39,10 @@ public:
 	template<class F, class ... Args>
 	std::future<typename std::result_of<F(Args...)>::type>
 	enqueue(F&& f, Args&&... args);
+
 	~ThreadPool();
-	size_t size() const { return workers.size(); }
+	size_t size() const;
+
 private:
 	// need to keep track of threads so we can join them
 	std::vector<std::thread> workers;
@@ -53,7 +55,7 @@ private:
 };
 
 // the constructor just launches some amount of workers
-inline ThreadPool::ThreadPool(size_t threads) :
+ThreadPool::ThreadPool(size_t threads) :
 		stop(false)
 {
 	if (threads == 0) {
@@ -80,6 +82,7 @@ inline ThreadPool::ThreadPool(size_t threads) :
 					}
 				});
 }
+
 // add new work item to the pool
 template<class F, class ... Args>
 std::future<typename std::result_of<F(Args...)>::type>
@@ -91,27 +94,32 @@ ThreadPool::enqueue(F&& f, Args&&... args)
 			std::bind (std::forward<F>(f), std::forward<Args>(args)...));
 	std::future<return_type> res = task->get_future();
 	{
-		std::unique_lock<std::mutex> lock(queue_mutex);
+		std::unique_lock<std::mutex> lock(this->queue_mutex);
 		// don't allow enqueueing after stopping the pool
-		if (stop)
+		if (this->stop)
 			throw std::runtime_error ("enqueue on stopped ThreadPool");
-		tasks.emplace([task]() {(*task)();});
+		this->tasks.emplace([task]() {(*task)();});
 	}
-	condition.notify_one();
+	this->condition.notify_one();
 	return res;
 }
 
 // the destructor joins all threads
-inline ThreadPool::~ThreadPool()
+ThreadPool::~ThreadPool()
 {
 	{
-		std::unique_lock<std::mutex> lock(queue_mutex);
-		stop = true;
+		std::unique_lock<std::mutex> lock(this->queue_mutex);
+		this->stop = true;
 	}
-	condition.notify_all();
-	for (auto &worker : workers) {
+	this->condition.notify_all();
+	for (auto &worker : this->workers) {
 		worker.join();
 	}
+}
+
+size_t ThreadPool::size() const
+{
+	return this->workers.size();
 }
 
 }
