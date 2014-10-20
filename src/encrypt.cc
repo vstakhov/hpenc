@@ -44,7 +44,7 @@ namespace hpenc
 class HPEncEncrypt::impl {
 public:
 	std::unique_ptr<HPEncKDF> kdf;
-	std::unique_ptr<HPencAead> cipher;
+	std::vector <std::shared_ptr<HPencAead> > ciphers;
 	std::unique_ptr<HPEncNonce> nonce;
 	int fd_in, fd_out;
 	unsigned block_size;
@@ -61,9 +61,7 @@ public:
 		unsigned nthreads = 0) : kdf(std::move(_kdf)), block_size(_block_size),
 			hdr(alg, _block_size)
 	{
-		cipher.reset(new HPencAead(alg));
-		cipher->setKey(kdf->genKey(cipher->keylen()));
-		nonce.reset(new HPEncNonce(cipher->noncelen()));
+
 		if (!in.empty()) {
 			fd_in = open(in.c_str(), O_RDONLY);
 			if (fd_in == -1) {
@@ -89,7 +87,16 @@ public:
 		encode = false;
 		pool.reset(new ThreadPool(nthreads));
 		io_bufs.resize(pool->size());
+		auto klen = AeadKeyLengths[static_cast<int>(alg)];
+		auto key = kdf->genKey(klen);
+
 		for (auto i = 0U; i < pool->size(); i ++) {
+			auto cipher = std::make_shared<HPencAead>(alg);
+			cipher->setKey(key);
+			if (!nonce) {
+				nonce.reset(new HPEncNonce(cipher->noncelen()));
+			}
+			ciphers.push_back(cipher);
 			io_bufs[i].resize(block_size + cipher->taglen());
 		}
 	}
@@ -106,7 +113,7 @@ public:
 	}
 
 	bool writeBlock(ssize_t rd, std::vector<byte> &io_buf,
-			const std::vector<byte> &n)
+			const std::vector<byte> &n, std::shared_ptr<HPencAead> const &cipher)
 	{
 		if (rd > 0) {
 			auto bs = htonl(rd);
@@ -162,6 +169,7 @@ void HPEncEncrypt::encrypt(bool encode)
 		for (;;) {
 			auto blocks_read = 0;
 			std::vector< std::future<bool> > results;
+			auto i = 0U;
 			for (auto &buf : pimpl->io_bufs) {
 				auto rd = pimpl->readBlock(buf);
 
@@ -169,10 +177,12 @@ void HPEncEncrypt::encrypt(bool encode)
 					auto n = pimpl->nonce->incAndGet();
 					results.emplace_back(
 							pimpl->pool->enqueue(
-									&impl::writeBlock, pimpl.get(), rd, buf, n
+								&impl::writeBlock, pimpl.get(), rd, buf, n,
+								pimpl->ciphers[i]
 							));
 					blocks_read ++;
 				}
+				i ++;
 			}
 
 			for(auto && result: results) {
@@ -182,10 +192,12 @@ void HPEncEncrypt::encrypt(bool encode)
 				}
 			}
 
-
 			if (++nblocks % rekey_blocks == 0) {
-				pimpl->cipher->setKey(std::move(pimpl->kdf->genKey(
-						pimpl->cipher->keylen())));
+				// Rekey all cipers
+				auto nkey = pimpl->kdf->genKey(pimpl->ciphers[0]->keylen());
+				for (auto const &cipher : pimpl->ciphers) {
+					cipher->setKey(nkey);
+				}
 			}
 		}
 	}
