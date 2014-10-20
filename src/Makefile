@@ -1,5 +1,6 @@
-CFLAGS?=	-Wall -O2 -g -std=c99
-CXXFLAGS?=	-Wall -std=c++11 -I../sodium -g
+COPTFLAGS?=	-O2
+CFLAGS?=	-Wall -g -std=c99 $(COPTFLAGS)
+CXXFLAGS?=	-Wall -std=c++11 -I../sodium -g $(COPTFLAGS)
 CC?=	cc
 CXX?=	c++
 AR?=	ar
@@ -18,7 +19,8 @@ OBJS=	aead.o \
 	main.o \
 	nonce.o \
 	kdf.o \
-	encrypt.o
+	encrypt.o \
+	decrypt.o
 	
 all: hpenc
 
@@ -42,6 +44,9 @@ kdf.o: kdf.cc $(DEPS)
 
 encrypt.o: encrypt.cc $(DEPS)
 	$(CXX) $(CXXFLAGS) -c encrypt.cc -o encrypt.o
+
+decrypt.o: decrypt.cc $(DEPS)
+	$(CXX) $(CXXFLAGS) -c decrypt.cc -o decrypt.o
 
 clean:
 	rm $(OBJS) hpenc || true

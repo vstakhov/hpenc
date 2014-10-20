@@ -1,5 +1,6 @@
-CFLAGS?=	-O2 -g -std=c99
-CXXFLAGS?=	-std=c++11
+COPTFLAGS?=	-O2
+CFLAGS?=	-Wall -g -std=c99 $(COPTFLAGS)
+CXXFLAGS?=	-Wall -std=c++11 -I../sodium -g $(COPTFLAGS)
 CC?=	cc
 CXX?=	c++
 AR?=	ar

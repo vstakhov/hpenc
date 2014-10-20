@@ -31,6 +31,7 @@
 extern "C" {
 #endif
 
+static void sodium_memzero(void *ptr, unsigned len) __attribute__((unused));
 static void sodium_memzero(void *ptr, unsigned len)
 {
 	volatile unsigned char *p = (volatile unsigned char *)ptr;
