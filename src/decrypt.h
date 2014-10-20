@@ -42,7 +42,8 @@ private:
 public:
 	HPEncDecrypt(std::unique_ptr<HPEncKDF> &&kdf,
 			const std::string &in,
-			const std::string &out);
+			const std::string &out,
+			unsigned nthreads = 0);
 	virtual ~HPEncDecrypt();
 
 	void decrypt(bool encode = false) throw(std::runtime_error);

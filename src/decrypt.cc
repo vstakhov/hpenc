@@ -36,6 +36,7 @@
 #include "aead.h"
 #include "util.h"
 #include "kdf.h"
+#include "thread_pool.h"
 
 namespace hpenc
 {
@@ -43,16 +44,18 @@ namespace hpenc
 class HPEncDecrypt::impl {
 public:
 	std::unique_ptr<HPEncKDF> kdf;
-	std::unique_ptr<HPencAead> cipher;
 	std::unique_ptr<HPEncNonce> nonce;
 	int fd_in, fd_out;
 	unsigned block_size;
-	std::vector<byte> io_buf;
+	std::vector<std::vector<byte> > io_bufs;
+	std::vector <std::shared_ptr<HPencAead> > ciphers;
 	bool encode;
+	std::unique_ptr<ThreadPool> pool;
 
 	impl(std::unique_ptr<HPEncKDF> &&_kdf,
 		const std::string &in,
-		const std::string &out) : kdf(std::move(_kdf)), block_size(0)
+		const std::string &out,
+		unsigned nthreads = 0) : kdf(std::move(_kdf)), block_size(0)
 	{
 		if (!in.empty()) {
 			fd_in = open(in.c_str(), O_RDONLY);
@@ -77,6 +80,8 @@ public:
 		}
 
 		encode = false;
+		pool.reset(new ThreadPool(nthreads));
+		io_bufs.resize(pool->size());
 	}
 
 	virtual ~impl()
@@ -96,18 +101,23 @@ public:
 		auto alg = hdr->alg;
 
 		// Setup cipher
-		cipher.reset(new HPencAead(alg));
-		if (cipher->noncelen() == 0) {
-			throw std::runtime_error("Invalid AEAD algorithm");
+		auto klen = AeadKeyLengths[static_cast<int>(alg)];
+		auto key = kdf->genKey(klen);
+
+		for (auto i = 0U; i < pool->size(); i ++) {
+			auto cipher = std::make_shared<HPencAead>(alg);
+			cipher->setKey(key);
+			if (!nonce) {
+				nonce.reset(new HPEncNonce(cipher->noncelen()));
+			}
+			ciphers.push_back(cipher);
+			io_bufs[i].resize(block_size + cipher->taglen());
 		}
-		cipher->setKey(std::move(kdf->genKey(cipher->keylen())));
-		io_buf.resize(block_size + cipher->taglen());
-		nonce.reset(new HPEncNonce(cipher->noncelen()));
 
 		return true;
 	}
 
-	bool writeBlock(ssize_t rd)
+	bool writeBlock(ssize_t rd, std::vector<byte> &io_buf)
 	{
 		if (rd > 0) {
 			if (::write(fd_out, io_buf.data(), rd) == -1) {
@@ -118,11 +128,11 @@ public:
 		return false;
 	}
 
-	ssize_t readBlock()
+	ssize_t readBlock(std::vector<byte> &io_buf,
+			const std::vector<byte> &n, std::shared_ptr<HPencAead> const &cipher)
 	{
 		auto rd = ::read(fd_in, io_buf.data(), block_size + cipher->taglen());
 		if (rd > 0) {
-			auto n = nonce->incAndGet();
 			auto datalen = rd - cipher->taglen();
 			MacTag tag;
 			auto bs = htonl(datalen);
@@ -149,8 +159,9 @@ public:
 
 HPEncDecrypt::HPEncDecrypt(std::unique_ptr<HPEncKDF> &&kdf,
 		const std::string &in,
-		const std::string &out) :
-	pimpl(new impl(std::move(kdf), in, out))
+		const std::string &out,
+		unsigned nthreads) :
+	pimpl(new impl(std::move(kdf), in, out, nthreads))
 {
 }
 
@@ -164,13 +175,43 @@ void HPEncDecrypt::decrypt(bool encode) throw(std::runtime_error)
 	if (pimpl->readHeader()) {
 		auto nblocks = 0U;
 		for (;;) {
-			auto rd = pimpl->readBlock();
-			if (!pimpl->writeBlock(rd)) {
-				break;
+			auto blocks_read = 0;
+			std::vector< std::future<ssize_t> > results;
+			auto i = 0U;
+			for (auto &buf : pimpl->io_bufs) {
+				auto n = pimpl->nonce->incAndGet();
+				results.emplace_back(
+						pimpl->pool->enqueue(
+								&impl::readBlock, pimpl.get(), buf, n,
+								pimpl->ciphers[i]
+				));
+				blocks_read ++;
+				i ++;
+			}
+
+			i = 0;
+			for(auto && result: results) {
+				result.wait();
+				auto rd = result.get();
+				if (rd < 0) {
+					throw std::runtime_error("Cannot decrypt block");
+				}
+				if (rd > 0) {
+					if (!pimpl->writeBlock(rd, pimpl->io_bufs[i])) {
+						throw std::runtime_error("Write error");
+					}
+				}
+				else {
+					break;
+				}
+				i ++;
 			}
 			if (++nblocks % rekey_blocks == 0) {
-				pimpl->cipher->setKey(std::move(pimpl->kdf->genKey(
-						pimpl->cipher->keylen())));
+				// Rekey all cipers
+				auto nkey = pimpl->kdf->genKey(pimpl->ciphers[0]->keylen());
+				for (auto const &cipher : pimpl->ciphers) {
+					cipher->setKey(nkey);
+				}
 			}
 		}
 	}
