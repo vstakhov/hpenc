@@ -152,8 +152,9 @@ HPEncEncrypt::HPEncEncrypt(std::unique_ptr<HPEncKDF> &&kdf,
 		const std::string &in,
 		const std::string &out,
 		AeadAlgorithm alg,
-		unsigned block_size) :
-	pimpl(new impl(std::move(kdf), in, out, alg, block_size))
+		unsigned block_size,
+		unsigned nthreads) :
+	pimpl(new impl(std::move(kdf), in, out, alg, block_size, nthreads))
 {
 }
 

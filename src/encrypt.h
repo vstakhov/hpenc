@@ -44,7 +44,8 @@ public:
 			const std::string &in,
 			const std::string &out,
 			AeadAlgorithm alg,
-			unsigned block_size);
+			unsigned block_size,
+			unsigned nthreads = 0);
 	virtual ~HPEncEncrypt();
 
 	void encrypt(bool encode = false);
