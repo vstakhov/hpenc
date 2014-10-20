@@ -132,7 +132,8 @@ public:
 			auto bs = htonl(datalen);
 
 			if (rd < cipher->taglen()) {
-				throw std::runtime_error("Truncated input, cannot read MAC tag");
+				std::cerr << "Truncated input, cannot read MAC tag" << std::endl;
+				return -1;
 			}
 
 			tag.data = io_buf->data() + datalen;
@@ -141,7 +142,8 @@ public:
 			if (!cipher->decrypt(reinterpret_cast<byte *>(&bs), sizeof(bs),
 					n.data(), n.size(), io_buf->data(), datalen,
 					&tag, io_buf->data())) {
-				throw std::runtime_error("Verification failed");
+				std::cerr << "Verification failed" << std::endl;
+				return -1;
 			}
 
 			return datalen;

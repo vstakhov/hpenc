@@ -156,6 +156,8 @@ HPEncEncrypt::~HPEncEncrypt()
 void HPEncEncrypt::encrypt(bool encode)
 {
 	pimpl->encode = encode;
+	bool last = false;
+
 	if (pimpl->writeHeader()) {
 		auto nblocks = 0U;
 		for (;;) {
@@ -175,7 +177,7 @@ void HPEncEncrypt::encrypt(bool encode)
 					blocks_read ++;
 				}
 				else {
-					return;
+					last = true;
 				}
 				i ++;
 			}
@@ -205,7 +207,7 @@ void HPEncEncrypt::encrypt(bool encode)
 							}
 						}
 					}
-					if (rd < pimpl->block_size) {
+					if (rd < pimpl->block_size || last) {
 						// We are done
 						return;
 					}

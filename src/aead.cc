@@ -129,18 +129,18 @@ public:
 		auto ctx_ptr = ctx_enc.get();
 		// Set nonce and key
 		EVP_CIPHER_CTX_ctrl(ctx_ptr, EVP_CTRL_GCM_SET_IVLEN, nlen, NULL);
-		EVP_EncryptInit_ex(ctx_ptr, NULL, NULL, key->data(),
+		EVP_DecryptInit_ex(ctx_ptr, NULL, NULL, key->data(),
 				(const unsigned char*) nonce);
 
-		// Set tag
-		EVP_CIPHER_CTX_ctrl(ctx_ptr, EVP_CTRL_GCM_SET_TAG, tag->datalen,
-				(void *) tag->data);
 		if (aadlen > 0) {
 			EVP_DecryptUpdate(ctx_ptr, NULL, &howmany,
 					(const unsigned char*) aad, aadlen);
 		}
 		EVP_DecryptUpdate(ctx_ptr,(unsigned char *) out, &howmany,
 				(const unsigned char *) in, inlen);
+		// Set tag
+		EVP_CIPHER_CTX_ctrl(ctx_ptr, EVP_CTRL_GCM_SET_TAG, tag->datalen,
+				(void *) tag->data);
 		auto res = EVP_DecryptFinal_ex(ctx_ptr,(unsigned char *) out,
 				&howmany);
 
@@ -166,7 +166,7 @@ public:
 
 	virtual size_t noncelen() const override
 	{
-		return 8;
+		return 12;
 	}
 };
 
