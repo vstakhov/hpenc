@@ -63,9 +63,10 @@ int main(int argc, char **argv)
 	std::unique_ptr<SessionKey> psk;
 	bool encode = false;
 	bool decrypt = false;
+	bool random_mode = false;
 	unsigned nthreads = 0;
 
-	while ((opt = ::getopt(argc, argv, "ha:b:k:Bdn:")) != -1) {
+	while ((opt = ::getopt(argc, argv, "ha:b:k:Bdn:r")) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv);
@@ -110,6 +111,8 @@ int main(int argc, char **argv)
 		case 'n':
 			nthreads = strtoul(optarg, NULL, 10);
 			break;
+		case 'r':
+			random_mode = true;
 		}
 	}
 
@@ -141,7 +144,7 @@ int main(int argc, char **argv)
 	else {
 		auto encrypter = util::make_unique<HPEncEncrypt>(std::move(kdf),
 			std::string(""), std::string(""),
-			alg, block_size, nthreads);
+			alg, block_size, nthreads, random_mode);
 		encrypter->encrypt(encode);
 	}
 

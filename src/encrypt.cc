@@ -51,6 +51,7 @@ public:
 	std::vector<std::shared_ptr<std::vector<byte> > > io_bufs;
 	HPEncHeader hdr;
 	bool encode;
+	bool random_mode;
 	std::unique_ptr<ThreadPool> pool;
 
 	impl(std::unique_ptr<HPEncKDF> &&_kdf,
@@ -58,8 +59,9 @@ public:
 		const std::string &out,
 		AeadAlgorithm alg,
 		unsigned _block_size,
-		unsigned nthreads = 0) : kdf(std::move(_kdf)), block_size(_block_size),
-			hdr(alg, _block_size)
+		unsigned nthreads = 0,
+		bool _rmode = false) : kdf(std::move(_kdf)), block_size(_block_size),
+			hdr(alg, _block_size), random_mode(_rmode)
 	{
 
 		if (!in.empty()) {
@@ -128,7 +130,7 @@ public:
 			auto mac_pos = io_buf->data() + rd;
 			std::copy(tag->data, tag->data + tag->datalen, mac_pos);
 
-			return rd;
+			return (random_mode ? rd + tag->datalen : rd);
 		}
 		return -1;
 	}
@@ -144,8 +146,9 @@ HPEncEncrypt::HPEncEncrypt(std::unique_ptr<HPEncKDF> &&kdf,
 		const std::string &out,
 		AeadAlgorithm alg,
 		unsigned block_size,
-		unsigned nthreads) :
-	pimpl(new impl(std::move(kdf), in, out, alg, block_size, nthreads))
+		unsigned nthreads,
+		bool random_mode) :
+	pimpl(new impl(std::move(kdf), in, out, alg, block_size, nthreads, random_mode))
 {
 }
 
@@ -158,7 +161,7 @@ void HPEncEncrypt::encrypt(bool encode)
 	pimpl->encode = encode;
 	bool last = false;
 
-	if (pimpl->writeHeader()) {
+	if (pimpl->random_mode || pimpl->writeHeader()) {
 		auto nblocks = 0U;
 		for (;;) {
 			auto blocks_read = 0;
@@ -193,8 +196,7 @@ void HPEncEncrypt::encrypt(bool encode)
 					if (rd > 0) {
 						const auto &io_buf = pimpl->io_bufs[i].get();
 						if (encode) {
-							auto b64_out = util::base64Encode(io_buf->data(), rd +
-									pimpl->ciphers[i]->taglen());
+							auto b64_out = util::base64Encode(io_buf->data(), rd);
 							if (util::atomicWrite(pimpl->fd_out,
 									reinterpret_cast<const byte *>(b64_out.data()),
 									b64_out.size()) == 0) {
@@ -203,7 +205,7 @@ void HPEncEncrypt::encrypt(bool encode)
 						}
 						else {
 							if (util::atomicWrite(pimpl->fd_out, io_buf->data(),
-									rd + pimpl->ciphers[i]->taglen()) == 0) {
+									rd) == 0) {
 								throw std::runtime_error("Cannot write encrypted block");
 							}
 						}
