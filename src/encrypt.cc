@@ -59,7 +59,7 @@ public:
 			hdr(alg, _block_size)
 	{
 		cipher.reset(new HPencAead(alg));
-		cipher->setKey(std::move(kdf->genKey(cipher->keylen())));
+		cipher->setKey(kdf->genKey(cipher->keylen()));
 		io_buf.resize(block_size + cipher->taglen());
 		nonce.reset(new HPEncNonce(cipher->noncelen()));
 		if (!in.empty()) {

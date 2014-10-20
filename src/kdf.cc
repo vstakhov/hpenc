@@ -50,15 +50,15 @@ HPEncKDF::~HPEncKDF()
 {
 }
 
-std::unique_ptr<SessionKey> HPEncKDF::genKey(unsigned keylen)
+std::shared_ptr<SessionKey> HPEncKDF::genKey(unsigned keylen)
 {
 	auto nonce = pimpl->nonce->incAndGet();
-	auto sk = util::make_unique<SessionKey>(keylen, 0);
+	auto sk = std::make_shared<SessionKey>(keylen, 0);
 
 	crypto_stream_chacha20(sk->data(), sk->size(), nonce.data(),
 		pimpl->psk->data());
 
-	return std::move(sk);
+	return sk;
 }
 
 } /* namespace hpenc */

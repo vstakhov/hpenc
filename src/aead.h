@@ -64,7 +64,7 @@ public:
 	explicit HPencAead(AeadAlgorithm alg = AeadAlgorithm::AES_GCM_128);
 	virtual ~HPencAead();
 
-	void setKey(std::unique_ptr<SessionKey> &&sk);
+	void setKey(std::shared_ptr<SessionKey> const &sk);
 	virtual std::unique_ptr<MacTag> encrypt(const byte *aad, size_t aadlen,
 			const byte *nonce, size_t nlen,
 			const byte *in, size_t inlen,

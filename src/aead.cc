@@ -36,13 +36,13 @@ namespace hpenc
 class AeadCipher
 {
 protected:
-	std::unique_ptr<SessionKey> key;
+	std::shared_ptr<SessionKey> key;
 public:
 	AeadCipher() {}
 	virtual ~AeadCipher() {}
 
 	virtual bool hasKey() const { return !!key; }
-	virtual void setKey(std::unique_ptr<SessionKey> &&_key) { key.swap(_key); }
+	virtual void setKey(std::shared_ptr<SessionKey> const &_key) { key = _key; }
 
 	virtual std::unique_ptr<MacTag> encrypt(const byte *aad, size_t aadlen,
 			const byte *nonce, size_t nlen, const byte *in, size_t inlen,
@@ -313,10 +313,10 @@ HPencAead::~HPencAead()
 {
 }
 
-void HPencAead::setKey(std::unique_ptr<SessionKey> &&sk)
+void HPencAead::setKey(std::shared_ptr<SessionKey> const &sk)
 {
 	if (pimpl->cipher) {
-		pimpl->cipher->setKey(std::move(sk));
+		pimpl->cipher->setKey(sk);
 	}
 }
 

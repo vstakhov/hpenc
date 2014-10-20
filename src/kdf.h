@@ -41,7 +41,7 @@ public:
 	explicit HPEncKDF(std::unique_ptr<SessionKey> &&psk);
 	virtual ~HPEncKDF();
 
-	std::unique_ptr<SessionKey> genKey(unsigned keylen);
+	std::shared_ptr<SessionKey> genKey(unsigned keylen);
 };
 
 } /* namespace hpenc */
