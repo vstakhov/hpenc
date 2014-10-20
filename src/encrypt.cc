@@ -94,9 +94,8 @@ public:
 		return hdr.toFd(fd_out);
 	}
 
-	bool writeBlock()
+	bool writeBlock(ssize_t rd)
 	{
-		auto rd = ::read(fd_in, io_buf.data(), block_size);
 		if (rd > 0) {
 			auto n = nonce->incAndGet();
 			auto bs = htonl(block_size);
@@ -117,6 +116,11 @@ public:
 		}
 		return false;
 	}
+
+	ssize_t readBlock()
+	{
+		return ::read(fd_in, io_buf.data(), block_size);
+	}
 };
 
 HPEncEncrypt::HPEncEncrypt(std::unique_ptr<HPEncKDF> &&kdf,
@@ -135,7 +139,17 @@ HPEncEncrypt::~HPEncEncrypt()
 void HPEncEncrypt::encrypt()
 {
 	if (pimpl->writeHeader()) {
-		while (pimpl->writeBlock());
+		auto nblocks = 0U;
+		for (;;) {
+			auto rd = pimpl->readBlock();
+			if (!pimpl->writeBlock(rd)) {
+				break;
+			}
+			if (++nblocks % rekey_blocks == 0) {
+				pimpl->cipher->setKey(std::move(pimpl->kdf->genKey(
+						pimpl->cipher->keylen())));
+			}
+		}
 	}
 }
 

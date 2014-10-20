@@ -58,6 +58,8 @@ struct HPEncHeader {
 	static std::unique_ptr<HPEncHeader> fromFd(int fd);
 };
 
+constexpr static const unsigned rekey_blocks = 1024;
+
 }
 
 
