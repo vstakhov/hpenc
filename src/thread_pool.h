@@ -55,7 +55,7 @@ private:
 };
 
 // the constructor just launches some amount of workers
-ThreadPool::ThreadPool(size_t threads) :
+inline ThreadPool::ThreadPool(size_t threads) :
 		stop(false)
 {
 	if (threads == 0) {
@@ -105,7 +105,7 @@ ThreadPool::enqueue(F&& f, Args&&... args)
 }
 
 // the destructor joins all threads
-ThreadPool::~ThreadPool()
+inline ThreadPool::~ThreadPool()
 {
 	{
 		std::unique_lock<std::mutex> lock(this->queue_mutex);
@@ -117,7 +117,7 @@ ThreadPool::~ThreadPool()
 	}
 }
 
-size_t ThreadPool::size() const
+inline size_t ThreadPool::size() const
 {
 	return this->workers.size();
 }

@@ -25,9 +25,22 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 
+// Ugly, ugly hack
+#if defined(__clang__) && \
+	(__STDC_VERSION__ >= 201112L || __cplusplus >= 201103L) && \
+	!defined(__CLANG_MAX_ALIGN_T_DEFINED)
+typedef struct {
+	long long __clang_max_align_nonce1
+	__attribute__((__aligned__(__alignof__(long long))));
+	long double __clang_max_align_nonce2
+	__attribute__((__aligned__(__alignof__(long double))));
+} max_align_t;
+#define __CLANG_MAX_ALIGN_T_DEFINED
+#endif
+
+#include <cstddef>
 #include <memory>
 #include <vector>
-#include <cstddef>
 
 namespace hpenc {
 

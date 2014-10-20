@@ -322,7 +322,7 @@ bool hpenc::HPEncHeader::toFd(int fd, bool encode)
 	return (::write(fd, &hdr, sizeof(hdr)) == sizeof(hdr));
 }
 
-struct std::unique_ptr<HPEncHeader> hpenc::HPEncHeader::fromFd(int fd, bool encode)
+std::unique_ptr<HPEncHeader> hpenc::HPEncHeader::fromFd(int fd, bool encode)
 {
 	HeaderWire in;
 
