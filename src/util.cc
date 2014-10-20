@@ -312,7 +312,7 @@ bool hpenc::HPEncHeader::toFd(int fd, bool encode)
 	}
 
 	::memcpy(hdr.magic, header_magic, sizeof(hdr.magic));
-	hdr.alg = htonl(static_cast<int>(alg));
+	hdr.alg = htonl(static_cast<uint32_t>(alg));
 	hdr.blocklen = htonl(blen);
 
 	if (encode) {
@@ -335,7 +335,7 @@ struct std::unique_ptr<HPEncHeader> hpenc::HPEncHeader::fromFd(int fd, bool enco
 	}
 
 
-	auto alg = static_cast<AeadAlgorithm>(in.alg);
+	auto alg = static_cast<AeadAlgorithm>(ntohl(in.alg));
 	auto blen = ntohl(in.blocklen);
 	if (blen > max_block) {
 		// Disallow too large blocks

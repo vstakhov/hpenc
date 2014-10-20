@@ -102,7 +102,7 @@ public:
 	{
 		if (rd > 0) {
 			auto n = nonce->incAndGet();
-			auto bs = htonl(block_size);
+			auto bs = htonl(rd);
 			auto tag = cipher->encrypt(reinterpret_cast<byte *>(&bs), sizeof(bs),
 					n.data(), n.size(), io_buf.data(), rd, io_buf.data());
 

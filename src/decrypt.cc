@@ -97,6 +97,9 @@ public:
 
 		// Setup cipher
 		cipher.reset(new HPencAead(alg));
+		if (cipher->noncelen() == 0) {
+			throw std::runtime_error("Invalid AEAD algorithm");
+		}
 		cipher->setKey(std::move(kdf->genKey(cipher->keylen())));
 		io_buf.resize(block_size + cipher->taglen());
 		nonce.reset(new HPEncNonce(cipher->noncelen()));
@@ -120,19 +123,19 @@ public:
 		auto rd = ::read(fd_in, io_buf.data(), block_size + cipher->taglen());
 		if (rd > 0) {
 			auto n = nonce->incAndGet();
-			auto bs = htonl(block_size);
+			auto datalen = rd - cipher->taglen();
+			MacTag tag;
+			auto bs = htonl(datalen);
 
 			if (rd < cipher->taglen()) {
 				throw std::runtime_error("Truncated input, cannot read MAC tag");
 			}
 
-			auto datalen = rd - cipher->taglen();
-			MacTag tag;
 			tag.data = io_buf.data() + datalen;
 			tag.datalen = cipher->taglen();
 
 			if (!cipher->decrypt(reinterpret_cast<byte *>(&bs), sizeof(bs),
-					n.data(), n.size(), io_buf.data(), io_buf.size(),
+					n.data(), n.size(), io_buf.data(), datalen,
 					&tag, io_buf.data())) {
 				throw std::runtime_error("Verification failed");
 			}
