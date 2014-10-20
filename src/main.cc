@@ -25,6 +25,7 @@
 
 #include "util.h"
 #include "encrypt.h"
+#include "decrypt.h"
 #include "kdf.h"
 #include <unistd.h>
 #include <iostream>
@@ -34,7 +35,7 @@ using namespace hpenc;
 
 static void usage(char **argv)
 {
-	std::cerr 	<< "Usage: " << argv[0] << " [-h] [-a algorithm] [-k key] [psk] "
+	std::cerr 	<< "Usage: " << argv[0] << " [-h] [-d] [-a algorithm] [-k key] [psk] "
 				<< "[-b block_size] [-B] [psk]"
 				<< std::endl;
 	::exit(EXIT_FAILURE);
@@ -61,8 +62,9 @@ int main(int argc, char **argv)
 	char *err_str;
 	std::unique_ptr<SessionKey> psk;
 	bool encode = false;
+	bool decrypt = false;
 
-	while ((opt = ::getopt(argc, argv, "ha:b:k:B")) != -1) {
+	while ((opt = ::getopt(argc, argv, "ha:b:k:Bd")) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv);
@@ -101,6 +103,9 @@ int main(int argc, char **argv)
 		case 'B':
 			encode = true;
 			break;
+		case 'd':
+			decrypt = true;
+			break;
 		}
 	}
 
@@ -108,6 +113,10 @@ int main(int argc, char **argv)
 	argc -= optind;
 
 	if (!psk) {
+		if (decrypt) {
+			throw std::invalid_argument("Cannot decrypt without key");
+			exit(EXIT_FAILURE);
+		}
 		psk = util::genPSK(alg);
 
 		std::cerr << "Random key: " << util::base32EncodeKey(psk.get())
@@ -119,10 +128,18 @@ int main(int argc, char **argv)
 	}
 
 	auto kdf = util::make_unique<HPEncKDF>(std::move(psk));
-	auto encrypter = util::make_unique<HPEncEncrypt>(std::move(kdf), "", "", alg,
-			block_size);
 
-	encrypter->encrypt(encode);
+	if (decrypt) {
+		auto decrypter = util::make_unique<HPEncDecrypt>(std::move(kdf),
+				std::string(""), std::string(""));
+		decrypter->decrypt(encode);
+	}
+	else {
+		auto encrypter = util::make_unique<HPEncEncrypt>(std::move(kdf),
+			std::string(""), std::string(""),
+			alg, block_size);
+		encrypter->encrypt(encode);
+	}
 
 	return 0;
 }
