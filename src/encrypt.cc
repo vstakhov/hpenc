@@ -174,6 +174,9 @@ void HPEncEncrypt::encrypt(bool encode)
 							));
 					blocks_read ++;
 				}
+				else {
+					return;
+				}
 				i ++;
 			}
 
