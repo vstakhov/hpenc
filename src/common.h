@@ -27,6 +27,7 @@
 
 #include <memory>
 #include <vector>
+#include <cstddef>
 
 namespace hpenc {
 
@@ -48,14 +49,16 @@ static const int AeadKeyLengths[] = {
 // Maximum is 16 megabytes block
 const unsigned max_block = 16 * 1024 * 1024;
 
+const unsigned master_key_length = 32; // CHACHA20_POLY1305
+
 struct HPEncHeader {
 	AeadAlgorithm alg;
 	unsigned blen;
 
 	HPEncHeader(AeadAlgorithm _alg, unsigned _blen) : alg(_alg), blen(_blen) {}
-	bool toFd(int fd);
+	bool toFd(int fd, bool encode = false);
 
-	static std::unique_ptr<HPEncHeader> fromFd(int fd);
+	static std::unique_ptr<HPEncHeader> fromFd(int fd, bool encode = false);
 };
 
 constexpr static const unsigned rekey_blocks = 1024;

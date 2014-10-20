@@ -34,6 +34,7 @@
 #include "encrypt.h"
 #include "nonce.h"
 #include "aead.h"
+#include "util.h"
 #include "kdf.h"
 
 namespace hpenc
@@ -48,6 +49,7 @@ public:
 	unsigned block_size;
 	std::vector<byte> io_buf;
 	HPEncHeader hdr;
+	bool encode;
 
 	impl(std::unique_ptr<HPEncKDF> &&_kdf,
 		const std::string &in,
@@ -81,6 +83,8 @@ public:
 		else {
 			fd_out = STDOUT_FILENO;
 		}
+
+		encode = false;
 	}
 
 	virtual ~impl()
@@ -91,7 +95,7 @@ public:
 
 	bool writeHeader()
 	{
-		return hdr.toFd(fd_out);
+		return hdr.toFd(fd_out, encode);
 	}
 
 	bool writeBlock(ssize_t rd)
@@ -108,10 +112,17 @@ public:
 
 			auto mac_pos = io_buf.data() + rd;
 			std::copy(tag->data, tag->data + tag->datalen, mac_pos);
-			if (::write(fd_out, io_buf.data(), rd + tag->datalen) == -1) {
-				return false;
+			if (encode) {
+				auto b64_out = util::base64Encode(io_buf.data(), rd + tag->datalen);
+				if (::write(fd_out, b64_out.data(), b64_out.size()) == -1) {
+					return false;
+				}
 			}
-
+			else {
+				if (::write(fd_out, io_buf.data(), rd + tag->datalen) == -1) {
+					return false;
+				}
+			}
 			return rd == block_size;
 		}
 		return false;
@@ -136,8 +147,9 @@ HPEncEncrypt::~HPEncEncrypt()
 {
 }
 
-void HPEncEncrypt::encrypt()
+void HPEncEncrypt::encrypt(bool encode)
 {
+	pimpl->encode = encode;
 	if (pimpl->writeHeader()) {
 		auto nblocks = 0U;
 		for (;;) {

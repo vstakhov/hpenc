@@ -34,7 +34,8 @@ using namespace hpenc;
 
 static void usage(char **argv)
 {
-	std::cerr 	<< "Usage: " << argv[0] << " [-h] [-a algorithm] [-k key] [psk]"
+	std::cerr 	<< "Usage: " << argv[0] << " [-h] [-a algorithm] [-k key] [psk] "
+				<< "[-b block_size] [-B] [psk]"
 				<< std::endl;
 	::exit(EXIT_FAILURE);
 }
@@ -58,8 +59,10 @@ int main(int argc, char **argv)
 	char opt;
 	unsigned block_size = 4096;
 	char *err_str;
+	std::unique_ptr<SessionKey> psk;
+	bool encode = false;
 
-	while ((opt = ::getopt(argc, argv, "ha:b:")) != -1) {
+	while ((opt = ::getopt(argc, argv, "ha:b:k:B")) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv);
@@ -84,22 +87,42 @@ int main(int argc, char **argv)
 					break;
 				}
 			}
+			break;
+		case 'k':
+		{
+			std::string key_base32(optarg);
+			auto decoded = util::base32DecodeKey(key_base32);
+			if (!decoded || decoded->size() != master_key_length) {
+				usage(argv);
+			}
+			psk = std::move(decoded);
+			break;
+		}
+		case 'B':
+			encode = true;
+			break;
 		}
 	}
 
 	argv += optind;
 	argc -= optind;
 
-	auto psk = util::genPSK(alg);
-	if (argc == 1 && std::string(argv[0]).find("psk") != std::string::npos) {
-		std::cout << util::base32EncodeKey(psk.get()) << std::endl;
+	if (!psk) {
+		psk = util::genPSK(alg);
+
+		std::cerr << "Random key: " << util::base32EncodeKey(psk.get())
+				  << std::endl;
+		// Just print key
+		if (argc == 1 && std::string(argv[0]).find("psk") != std::string::npos) {
+			exit(EXIT_SUCCESS);
+		}
 	}
 
 	auto kdf = util::make_unique<HPEncKDF>(std::move(psk));
 	auto encrypter = util::make_unique<HPEncEncrypt>(std::move(kdf), "", "", alg,
 			block_size);
 
-	encrypter->encrypt();
+	encrypter->encrypt(encode);
 
 	return 0;
 }

@@ -36,6 +36,9 @@ namespace util {
 std::string base32EncodeKey(const SessionKey *in);
 std::unique_ptr<SessionKey> base32DecodeKey(const std::string &in);
 
+std::vector<byte> base64Decode(const std::string& input);
+std::string base64Encode(const byte *input, size_t len);
+
 template<typename T, typename ...Args>
 ::std::unique_ptr<T> make_unique(Args&& ...args)
 {

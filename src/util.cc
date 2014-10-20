@@ -151,7 +151,7 @@ hpenc::util::base32DecodeKey(const std::string &in)
 		auto decoded = b32_dec[static_cast<byte>(c)];
 		if (decoded == 0xff) {
 			// Invalid input
-			return nullptr;
+			throw std::runtime_error("Non-Valid base32!");
 		}
 		acc = (decoded << processed_bits) | acc;
 		processed_bits += 5;
@@ -162,6 +162,112 @@ hpenc::util::base32DecodeKey(const std::string &in)
 	}
 
 	return res;
+}
+
+const static char padCharacter = '=';
+
+std::vector<byte> hpenc::util::base64Decode(const std::string& input)
+{
+	if (input.length() % 4) //Sanity check
+		throw std::runtime_error("Non-Valid base64!");
+
+	size_t padding = 0;
+
+	if (input.length())
+	{
+		if (input[input.length()-1] == padCharacter)
+			padding++;
+		if (input[input.length()-2] == padCharacter)
+			padding++;
+	}
+	//Setup a vector to hold the result
+	std::vector<byte> decodedBytes;
+	decodedBytes.reserve(((input.length()/4)*3) - padding);
+
+	auto temp = 0U;
+	auto cursor = input.begin();
+
+	while (cursor < input.end())
+	{
+		for (auto quantumPosition = 0U; quantumPosition < 4; quantumPosition++)
+		{
+			temp <<= 6;
+			if       (*cursor >= 0x41 && *cursor <= 0x5A)
+				temp |= *cursor - 0x41;
+			else if  (*cursor >= 0x61 && *cursor <= 0x7A)
+				temp |= *cursor - 0x47;
+			else if  (*cursor >= 0x30 && *cursor <= 0x39)
+				temp |= *cursor + 0x04;
+			else if  (*cursor == 0x2B)
+				temp |= 0x3E;
+			else if  (*cursor == 0x2F)
+				temp |= 0x3F;
+			else if  (*cursor == padCharacter)
+			{
+				switch( input.end() - cursor )
+				{
+				case 1: //One pad character
+					decodedBytes.push_back((temp >> 16) & 0x000000FF);
+					decodedBytes.push_back((temp >> 8 ) & 0x000000FF);
+					return decodedBytes;
+				case 2: //Two pad characters
+					decodedBytes.push_back((temp >> 10) & 0x000000FF);
+					return decodedBytes;
+				default:
+					throw std::runtime_error("Invalid Padding in Base 64!");
+				}
+			}  else
+				throw std::runtime_error("Non-Valid Character in Base 64!");
+			cursor++;
+		}
+		decodedBytes.push_back((temp >> 16) & 0x000000FF);
+		decodedBytes.push_back((temp >> 8 ) & 0x000000FF);
+		decodedBytes.push_back((temp      ) & 0x000000FF);
+	}
+
+	return decodedBytes;
+}
+
+const static char encodeLookup[] =
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+std::string hpenc::util::base64Encode(const byte *input, size_t len)
+{
+	std::string encoded;
+
+	encoded.reserve(((len/3) + (len % 3 > 0)) * 4);
+
+	auto temp = 0U;
+
+	auto cursor = input;
+	for(size_t idx = 0; idx < len/3; idx++)
+	{
+		temp  = (*cursor++) << 16; //Convert to big endian
+		temp += (*cursor++) << 8;
+		temp += (*cursor++);
+		encoded.append(1,encodeLookup[(temp & 0x00FC0000) >> 18]);
+		encoded.append(1,encodeLookup[(temp & 0x0003F000) >> 12]);
+		encoded.append(1,encodeLookup[(temp & 0x00000FC0) >> 6 ]);
+		encoded.append(1,encodeLookup[(temp & 0x0000003F)      ]);
+	}
+	switch(len % 3)
+	{
+	case 1:
+		temp  = (*cursor++) << 16; //Convert to big endian
+		encoded.append(1,encodeLookup[(temp & 0x00FC0000) >> 18]);
+		encoded.append(1,encodeLookup[(temp & 0x0003F000) >> 12]);
+		encoded.append(2,padCharacter);
+		break;
+	case 2:
+		temp  = (*cursor++) << 16; //Convert to big endian
+		temp += (*cursor++) << 8;
+		encoded.append(1,encodeLookup[(temp & 0x00FC0000) >> 18]);
+		encoded.append(1,encodeLookup[(temp & 0x0003F000) >> 12]);
+		encoded.append(1,encodeLookup[(temp & 0x00000FC0) >> 6 ]);
+		encoded.append(1,padCharacter);
+		break;
+	}
+
+	return encoded;
 }
 
 static const char *randomdev = "/dev/urandom";
@@ -197,22 +303,26 @@ struct HeaderWire {
 
 static const char header_magic[8] = { 'h', 'p', 'e', 'n', 'c', 0, 0, 0 };
 
-bool hpenc::HPEncHeader::toFd(int fd)
+bool hpenc::HPEncHeader::toFd(int fd, bool encode)
 {
-	HeaderWire out;
+	HeaderWire hdr;
 
 	if (fd == -1) {
 		return false;
 	}
 
-	::memcpy(out.magic, header_magic, sizeof(out.magic));
-	out.alg = htonl(static_cast<int>(alg));
-	out.blocklen = htonl(blen);
+	::memcpy(hdr.magic, header_magic, sizeof(hdr.magic));
+	hdr.alg = htonl(static_cast<int>(alg));
+	hdr.blocklen = htonl(blen);
 
-	return (::write(fd, &out, sizeof(out)) == sizeof(out));
+	if (encode) {
+		auto out = util::base64Encode(reinterpret_cast<byte *>(&hdr), sizeof(hdr));
+		return (::write(fd, out.data(), out.size()) == out.size());
+	}
+	return (::write(fd, &hdr, sizeof(hdr)) == sizeof(hdr));
 }
 
-struct std::unique_ptr<HPEncHeader> hpenc::HPEncHeader::fromFd(int fd)
+struct std::unique_ptr<HPEncHeader> hpenc::HPEncHeader::fromFd(int fd, bool encode)
 {
 	HeaderWire in;
 

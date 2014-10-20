@@ -47,7 +47,7 @@ public:
 			unsigned block_size);
 	virtual ~HPEncEncrypt();
 
-	void encrypt();
+	void encrypt(bool encode = false);
 };
 
 } /* namespace hpenc */
