@@ -47,6 +47,9 @@ template<typename T, typename ...Args>
 
 std::unique_ptr<SessionKey> genPSK(AeadAlgorithm alg);
 
+size_t atomicRead(int fd, byte *buf, size_t n);
+size_t atomicWrite(int fd, const byte *buf, size_t n);
+
 } // util namespace
 
 } // hpenc namespace

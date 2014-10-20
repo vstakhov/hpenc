@@ -346,3 +346,51 @@ std::unique_ptr<HPEncHeader> hpenc::HPEncHeader::fromFd(int fd, bool encode)
 
 	return std::move(res);
 }
+
+size_t
+hpenc::util::atomicRead(int fd, byte *buf, size_t n)
+{
+	auto *s = buf;
+	size_t pos = 0;
+	ssize_t res;
+
+	while (n > pos) {
+		res = ::read(fd, s + pos, n - pos);
+		switch (res) {
+		case -1:
+			if (errno == EINTR || errno == EAGAIN)
+				continue;
+			return 0;
+		case 0:
+			errno = EPIPE;
+			return pos;
+		default:
+			pos += (u_int)res;
+		}
+	}
+	return pos;
+}
+
+size_t
+hpenc::util::atomicWrite(int fd, const byte *buf, size_t n)
+{
+	auto *s = buf;
+	size_t pos = 0;
+	ssize_t res;
+
+	while (n > pos) {
+		res = ::write(fd, s + pos, n - pos);
+		switch (res) {
+		case -1:
+			if (errno == EINTR || errno == EAGAIN)
+				continue;
+			return 0;
+		case 0:
+			errno = EPIPE;
+			return pos;
+		default:
+			pos += (u_int)res;
+		}
+	}
+	return pos;
+}

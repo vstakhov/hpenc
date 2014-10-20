@@ -120,10 +120,10 @@ public:
 
 	bool writeBlock(ssize_t rd, std::vector<byte> *io_buf)
 	{
-		return ::write(fd_out, io_buf->data(), rd) != -1;
+		return util::atomicWrite(fd_out, io_buf->data(), rd) > 0;
 	}
 
-	ssize_t readBlock(ssize_t rd, std::vector<byte> *io_buf,
+	ssize_t readBlock(size_t rd, std::vector<byte> *io_buf,
 			const std::vector<byte> &n, std::shared_ptr<HPencAead> const &cipher)
 	{
 		if (rd > 0) {
@@ -178,7 +178,7 @@ void HPEncDecrypt::decrypt(bool encode) throw(std::runtime_error)
 			auto i = 0U;
 			for (auto &buf : pimpl->io_bufs) {
 
-				auto rd = ::read(pimpl->fd_in,
+				auto rd = util::atomicRead(pimpl->fd_in,
 						buf->data(),
 						pimpl->block_size + pimpl->ciphers[0]->taglen());
 				if (rd > 0) {

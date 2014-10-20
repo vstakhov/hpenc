@@ -133,9 +133,9 @@ public:
 		return -1;
 	}
 
-	ssize_t readBlock(std::vector<byte> *io_buf)
+	size_t readBlock(std::vector<byte> *io_buf)
 	{
-		return ::read(fd_in, io_buf->data(), block_size);
+		return util::atomicRead(fd_in, io_buf->data(), block_size);
 	}
 };
 
@@ -195,14 +195,15 @@ void HPEncEncrypt::encrypt(bool encode)
 						if (encode) {
 							auto b64_out = util::base64Encode(io_buf->data(), rd +
 									pimpl->ciphers[i]->taglen());
-							if (::write(pimpl->fd_out, b64_out.data(),
-									b64_out.size()) == -1) {
+							if (util::atomicWrite(pimpl->fd_out,
+									reinterpret_cast<const byte *>(b64_out.data()),
+									b64_out.size()) == 0) {
 								throw std::runtime_error("Cannot write encrypted block");
 							}
 						}
 						else {
-							if (::write(pimpl->fd_out, io_buf->data(),
-									rd + pimpl->ciphers[i]->taglen()) == -1) {
+							if (util::atomicWrite(pimpl->fd_out, io_buf->data(),
+									rd + pimpl->ciphers[i]->taglen()) == 0) {
 								throw std::runtime_error("Cannot write encrypted block");
 							}
 						}
