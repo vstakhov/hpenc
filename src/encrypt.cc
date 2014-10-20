@@ -36,6 +36,7 @@
 #include "aead.h"
 #include "util.h"
 #include "kdf.h"
+#include "thread_pool.h"
 
 namespace hpenc
 {
@@ -47,20 +48,21 @@ public:
 	std::unique_ptr<HPEncNonce> nonce;
 	int fd_in, fd_out;
 	unsigned block_size;
-	std::vector<byte> io_buf;
+	std::vector<std::vector<byte> > io_bufs;
 	HPEncHeader hdr;
 	bool encode;
+	std::unique_ptr<ThreadPool> pool;
 
 	impl(std::unique_ptr<HPEncKDF> &&_kdf,
 		const std::string &in,
 		const std::string &out,
 		AeadAlgorithm alg,
-		unsigned _block_size) : kdf(std::move(_kdf)), block_size(_block_size),
+		unsigned _block_size,
+		unsigned nthreads = 0) : kdf(std::move(_kdf)), block_size(_block_size),
 			hdr(alg, _block_size)
 	{
 		cipher.reset(new HPencAead(alg));
 		cipher->setKey(kdf->genKey(cipher->keylen()));
-		io_buf.resize(block_size + cipher->taglen());
 		nonce.reset(new HPEncNonce(cipher->noncelen()));
 		if (!in.empty()) {
 			fd_in = open(in.c_str(), O_RDONLY);
@@ -85,6 +87,11 @@ public:
 		}
 
 		encode = false;
+		pool.reset(new ThreadPool(nthreads));
+		io_bufs.resize(pool->size());
+		for (auto i = 0U; i < pool->size(); i ++) {
+			io_bufs[i].resize(block_size + cipher->taglen());
+		}
 	}
 
 	virtual ~impl()
@@ -98,10 +105,10 @@ public:
 		return hdr.toFd(fd_out, encode);
 	}
 
-	bool writeBlock(ssize_t rd)
+	bool writeBlock(ssize_t rd, std::vector<byte> &io_buf,
+			const std::vector<byte> &n)
 	{
 		if (rd > 0) {
-			auto n = nonce->incAndGet();
 			auto bs = htonl(rd);
 			auto tag = cipher->encrypt(reinterpret_cast<byte *>(&bs), sizeof(bs),
 					n.data(), n.size(), io_buf.data(), rd, io_buf.data());
@@ -128,7 +135,7 @@ public:
 		return false;
 	}
 
-	ssize_t readBlock()
+	ssize_t readBlock(std::vector<byte> &io_buf)
 	{
 		return ::read(fd_in, io_buf.data(), block_size);
 	}
@@ -153,10 +160,29 @@ void HPEncEncrypt::encrypt(bool encode)
 	if (pimpl->writeHeader()) {
 		auto nblocks = 0U;
 		for (;;) {
-			auto rd = pimpl->readBlock();
-			if (!pimpl->writeBlock(rd)) {
-				break;
+			auto blocks_read = 0;
+			std::vector< std::future<bool> > results;
+			for (auto &buf : pimpl->io_bufs) {
+				auto rd = pimpl->readBlock(buf);
+
+				if (rd > 0) {
+					auto n = pimpl->nonce->incAndGet();
+					results.emplace_back(
+							pimpl->pool->enqueue(
+									&impl::writeBlock, pimpl.get(), rd, buf, n
+							));
+					blocks_read ++;
+				}
 			}
+
+			for(auto && result: results) {
+				result.wait();
+				if (!result.get()) {
+					throw std::runtime_error("Cannot encrypt block");
+				}
+			}
+
+
 			if (++nblocks % rekey_blocks == 0) {
 				pimpl->cipher->setKey(std::move(pimpl->kdf->genKey(
 						pimpl->cipher->keylen())));
