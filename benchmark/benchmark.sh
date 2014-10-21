@@ -13,7 +13,7 @@ if [ "F$NCPU" = "F" ] ; then
 fi
 
 # Block size tests
-echo "Block size tests (all cores)"
+echo "Block size encrypt test (all cores)"
 for _b in $BLOCK_SIZES ; do
 	printf "$_b\t"
 	_cnt=$(($DATA_SIZE / $_b))
@@ -26,12 +26,25 @@ for _b in $BLOCK_SIZES ; do
 done
 
 # CPU count tests
-echo "CPU cores tests (16M block)"
+echo "CPU cores encrypt test (16M block)"
 for _b in `seq $NCPU` ; do
 	_cnt=$(($DATA_SIZE / 16777216))
 	printf "$_b\t"
 	for _a in $ALGORITHMS ; do
 		/usr/bin/time -p -o /tmp/_hpenc_bench $HPENC -b 16M -n $_b -a $_a -c $_cnt < /dev/zero > /dev/null 2>&1
+		cat /tmp/_hpenc_bench | grep real | awk '{printf "%s\t", $2}'
+		rm /tmp/_hpenc_bench
+	done
+	echo
+done
+
+# PRF generator
+echo "CPU cores PRF test (16M block)"
+for _b in `seq $NCPU` ; do
+	_cnt=$(($DATA_SIZE / 16777216))
+	printf "$_b\t"
+	for _a in $ALGORITHMS ; do
+		/usr/bin/time -p -o /tmp/_hpenc_bench $HPENC -b 16M -n $_b -a $_a -c $_cnt -r > /dev/null 2>&1
 		cat /tmp/_hpenc_bench | grep real | awk '{printf "%s\t", $2}'
 		rm /tmp/_hpenc_bench
 	done
