@@ -130,7 +130,7 @@ public:
 			auto mac_pos = io_buf->data() + rd;
 			std::copy(tag->data, tag->data + tag->datalen, mac_pos);
 
-			return (random_mode ? rd + tag->datalen : rd);
+			return (random_mode ? rd: rd + tag->datalen);
 		}
 		return -1;
 	}
@@ -194,6 +194,7 @@ void HPEncEncrypt::encrypt(bool encode, unsigned count)
 				}
 				else {
 					last = true;
+					break;
 				}
 				i ++;
 			}
