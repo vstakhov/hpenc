@@ -1,0 +1,144 @@
+.TH "HPENC" "1" "" "User Commands" ""
+.SH NAME
+.PP
+hpenc \- high performance encryption command line utility
+.SH SYNOPSIS
+.PP
+hpenc [\f[I]options\f[]] < input > output
+.PP
+hpenc [\f[I]options\f[]] \-r > output
+.PP
+hpenc psk
+.PP
+hpenc \-h
+.SH DESCRIPTION
+.PP
+\f[C]hpenc\f[] provides command line API for authenticated encryption
+algorithms, in particular \f[C]AES\-[128|256]\-GCM\f[] and
+\f[C]ChaCha20\-Poly1305\f[].
+This tool is intended to perform bulk encryption with authentication
+tags for further data transfer.
+Unlike \f[C]openssl\ enc\f[] this tool supports only modern
+authenticated encryption ciphers providing both secrecy and integrity of
+input data.
+.PP
+\f[C]hpenc\f[] utility reads input data from standard input and outputs
+encrypted (or decrypted data) to standard output.
+.PP
+To generate PSK one can use the following syntax:
+.IP
+.nf
+\f[C]
+hpenc\ psk
+\f[]
+.fi
+.PP
+For pseudo\-random generator the following invocation could be used:
+.IP
+.nf
+\f[C]
+hpenc\ \-r
+\f[]
+.fi
+.SH OPTIONS
+.TP
+.B \-a \f[I]algorithm\f[]
+Specify algorithm to use: \f[C]aes\-128\f[], \f[C]aes\-256\f[] or
+\f[C]chacha20\f[]
+.RS
+.RE
+.TP
+.B \-d
+Decrypt data instead of encryption.
+PSK must be specified for decryption in a command line
+.RS
+.RE
+.TP
+.B \-r
+Run in pseudo\-random generator mode with no input needed
+.RS
+.RE
+.TP
+.B \-b \f[I]block_size\f[]
+Use the specified block size instead of the default one (4KB).
+Use \[aq]k\[aq] for kilobytes, \[aq]m\[aq] for megabytes.
+Maximum block size is 16MB
+.RS
+.RE
+.TP
+.B \-c \f[I]count\f[]
+Stop after processing \f[I]count\f[] of blocks.
+Use \[aq]k\[aq] for kiloblocks, \[aq]m\[aq] for megablocks and
+\[aq]g\[aq] for gigablocks
+.RS
+.RE
+.TP
+.B \-k \f[I]key\f[]
+Use the specified \f[I]key\f[] for encryption/decryption.
+Key is required for decryption and optional for encryption.
+The size of PSK is 52 base32 encoded symbols.
+.RS
+.RE
+.TP
+.B \-B
+Encode output or input to base64
+.RS
+.RE
+.SH RETURN VALUE
+.PP
+On exit \f[C]hpenc\f[] returns \f[C]0\f[] if operation was successfull
+and an error code otherwise.
+.SH EXAMPLES
+.PP
+Generate PSK:
+.IP
+.nf
+\f[C]
+hpenc\ psk
+\f[]
+.fi
+.PP
+Encrypt data:
+.IP
+.nf
+\f[C]
+echo\ \[aq]data\[aq]\ |\ hpenc\ \-k\ 8jc38bntqehs31f3q8j4du4ry88k34ugh6eux6aoggpkbywgok9y\ >\ encrypted
+\f[]
+.fi
+.PP
+Decrypt data:
+.IP
+.nf
+\f[C]
+hpenc\ \-k\ 8jc38bntqehs31f3q8j4du4ry88k34ugh6eux6aoggpkbywgok9y\ \-d\ <\ encrypted
+\f[]
+.fi
+.PP
+Run as random number generator:
+.IP
+.nf
+\f[C]
+hpenc\ \-r\ \-b\ 1M\ \-c\ 10\ >\ random
+\f[]
+.fi
+.PP
+Securely reset all data on your hard drive:
+.IP
+.nf
+\f[C]
+hpenc\ \-r\ \-b\ 1M\ >\ /dev/hda
+\f[]
+.fi
+.PP
+Move data over the network:
+.IP
+.nf
+\f[C]
+bar\ \-b\ 16M\ \-s\ 102400M\ /dev/vg0/lvol1\ |\ ./hpenc\ \-b\ 16M\ \-k\ 8jc38bntqehs31f3q8j4du4ry88k34ugh6eux6aoggpkbywgok9y\ |\ nc\ target\ 1234
+nc\ \-l\ 1234\ |\ ./hpenc\ \-d\ \-k\ 8jc38bntqehs31f3q8j4du4ry88k34ugh6eux6aoggpkbywgok9y\ >\ /dev/vg0/lvol
+\f[]
+.fi
+.SH SEE ALSO
+.PP
+Hpenc documentation and source codes may be downloaded from
+<https://github.com/vstakhov/hpenc>.
