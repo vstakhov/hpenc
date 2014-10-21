@@ -74,6 +74,25 @@ hpenc -a chacha -k en1o46877q7zxcen1cgbjc8qzjk1etdmsoctwyi3yy38ant7q59b -b 4M < 
 
 The maximum size of a block is limited to 16 megabytes (because we need to change nonces).
 
+## Performance results
+
+Hardware used: Intel Xeon E3 (Sandy Bridge), 4 physical cores, 8 logical cores
+
+* Graph of dependency of encryption throughput on the input block size:
+
+![graph](https://github.com/vstakhov/hpenc/raw/master/doc/hpenc_throughput_from_block_size.png "Throughput from block size")
+
+* Graph of dependency of encryption throughput on the number of CPU cores:
+
+![graph](https://github.com/vstakhov/hpenc/raw/master/doc/hpenc_throughput_from_cores_count.png "Throughput from cores count")
+
+Hardware used: AMD Opteron(tm) Processor 6344, 24 physical cores, 48 logical cores, 4 NUMA nodes
+
+* Graph of dependency of PRF throughput on the number of CPU cores:
+
+![graph](https://github.com/vstakhov/hpenc/raw/master/doc/hpenc_prf_throughput_from_cores_count_amd_opteron.png "Throughput from cores count")
+
+
 ## Security model
 
 `hpenc` uses stream ciphers with authentication tag:
