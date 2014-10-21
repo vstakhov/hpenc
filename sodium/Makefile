@@ -50,4 +50,6 @@ verify_poly1305_donna.o: verify_poly1305_donna.c $(DEPS)
 clean:
 	rm $(OBJS) libsodium_contrib.a || true
 
-.PHONY: clean
+install: libsodium_contrib.a
+
+.PHONY: clean install

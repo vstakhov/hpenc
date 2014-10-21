@@ -12,4 +12,9 @@ clean:
 		$(MAKE) -C $$dir clean; \
 	done
 
-.PHONY: subdirs clean
+install:
+	for dir in $(SUBDIRS); do \
+		$(MAKE) -C $$dir install; \
+	done
+
+.PHONY: subdirs clean install

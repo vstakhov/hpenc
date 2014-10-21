@@ -7,6 +7,8 @@ AR?=	ar
 ARFLAGS?=	rcs
 LIBS?=	-lcrypto -lsodium_contrib
 LDFLAGS?=	-L../sodium -pthread
+INSTALL?=	/usr/bin/install
+PREFIX?=	/usr/local
 
 DEPS=	aead.h \
 	common.h \
@@ -53,4 +55,7 @@ decrypt.o: decrypt.cc $(DEPS)
 clean:
 	rm $(OBJS) hpenc || true
 
-.PHONY: clean
+install: hpenc
+	$(INSTALL) -m 0755 hpenc $(DESTDIR)$(PREFIX)/bin/hpenc
+
+.PHONY: clean install

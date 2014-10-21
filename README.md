@@ -21,19 +21,19 @@ I understand that external dependencies might be evil for servers transferring, 
 space for storing authentication data but it is negligible in terms of the overall size (about 16K for each gigabyte of data). In this case you still do not need to create som complex atchitecture of keys: just generate a key and store it in some secure place.
 
 - You need some fast entropy generator. Of course, you could use `rand()` function from your libc. However,
-it is very insecure if you want cryptographic input. `hpenc` provides absolutely secure and random data on
+it is very insecure if you want cryptographic input. `hpenc` provides secure pseudo-random data on a
 very high speed. In fact, you can generate up to 2 GB of random numbers per second on a modern hardware (Inter Core i7 SandyBridge)! Comparing to 14 Mb per second for reading from `/dev/urandom` it is really fast (but still secure).
 
 If you are still not convinced here is a list of features provided by `hpenc`:
 
 - **Authenticated encryption** - your data *cannot* be forged or corrupted without detection.
 - **Parallel processing** - `hpenc` uses block IO and you can process multiple blocks simultaneously, which is extremely useful if you have multi-core environment.
-- **Strong ciphers** - `hpenc` uses the state-of-art `aes` and `chacha20` ciphers in couter-like mode. This provides up to 256 bits of encryption level (128 bits are considered as totally secure in pre-quantum-computer world).
+- **Strong ciphers** - `hpenc` uses the state-of-art [`aes-gcm`](http://en.wikipedia.org/wiki/Galois/Counter_Mode) and [`chacha20`](http://cr.yp.to/chacha.html) ciphers in counter-like mode. This provides up to 2^248 complexity to break the cipher [1](http://eprint.iacr.org/2007/472.pdf) (2^128 complexity is considered as totally secure in pre-quantum-computer world).
 - **Easy interface** - `hpenc < in > out`: what could be more simple?
 - **Hardware acceleration** - do you have the modern CPU? `hpenc` can utilize all its advanced cryptography functions defined for `AES-NI` and `PCLMULQDQ` instructions (that must be supported by openssl). For those with old or embedded CPU (such as ARM), `hpenc` provides portable and fast `chacha20` cipher.
 - **Simple key management** - all that you need to remember/transfer is 52 symbols shared key. All these symbols are *pronounceable* meaning that you can tell them using a phone or writing them down on a sheet of paper without worrying about `o` and `0` ambiguity.
 - **(Almost) zero dependencies** - `hpenc` requires only `libcrypto` from openssl >= 1.0.1d and C++11 compatible compiler: gcc 4.7+ or clang 3.3+. If you use some punny system that does not satisfy these requirements, than you don't care about performance anyway.
-- **Secure random numbers generator** - `hpenc` can work as pseudo-random numbers generator. I have performed a set of tests on the generated sequences and it seems that `hpenc` generates *secure* sequences of pseudo-random numbers on a very high speed (gigabytes per second). 
+- **Secure random numbers generator** - `hpenc` can work as pseudo-random numbers generator. In a set of standard tests (diehard) on the generated sequences `hpenc` generates *secure* sequences of pseudo-random numbers on a very high speed (gigabytes per second). 
 
 ## Summary and motivation
 
@@ -244,7 +244,7 @@ Preparing to run test 209.  ntuple = 0
 
 ## Further tasks
 
-1. Multithreading (stream ciphers works perfectly fine for multiple threads)
+1. ~~Multithreading (stream ciphers works perfectly fine for multiple threads)~~
 2. PBKDF (for password based keys)
 3. ???
 4. Profit 
