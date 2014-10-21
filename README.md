@@ -35,6 +35,34 @@ If you are still not convinced here is a list of features provided by `hpenc`:
 - **(Almost) zero dependencies** - `hpenc` requires only `libcrypto` from openssl >= 1.0.1d and C++11 compatible compiler: gcc 4.7+ or clang 3.3+. If you use some punny system that does not satisfy these requirements, than you don't care about performance anyway.
 - **Secure random numbers generator** - `hpenc` can work as pseudo-random numbers generator. In a set of standard tests (diehard) on the generated sequences `hpenc` generates *secure* sequences of pseudo-random numbers on a very high speed (gigabytes per second). 
 
+## Examples of usage
+
+Generate PSK:
+
+    hpenc psk
+
+Encrypt data:
+
+    echo 'data' | hpenc -k 8jc38bntqehs31f3q8j4du4ry88k34ugh6eux6aoggpkbywgok9y > encrypted
+
+Decrypt data:
+
+    hpenc -k 8jc38bntqehs31f3q8j4du4ry88k34ugh6eux6aoggpkbywgok9y -d < encrypted
+
+Run as random number generator:
+
+    hpenc -r -b 1M -c 10 > random
+
+Securely reset all data on your hard drive:
+
+    hpenc -r -b 1M > /dev/hda
+
+Move data over the network (using [bar](http://www.theiling.de/projects/bar.html) utility):
+
+    bar -b 16M -s 102400M /dev/vg0/lvol1 | ./hpenc -b 16M -k 8jc38bntqehs31f3q8j4du4ry88k34ugh6eux6aoggpkbywgok9y | nc target 1234
+    nc -l 1234 | ./hpenc -d -k 8jc38bntqehs31f3q8j4du4ry88k34ugh6eux6aoggpkbywgok9y > /dev/vg0/lvol
+
+
 ## Summary and motivation
 
 `hpenc` provides command line API for authenticated encryption algorithms, in particular `AES-[128|256]-GCM` and
