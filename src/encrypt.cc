@@ -176,7 +176,12 @@ void HPEncEncrypt::encrypt(bool encode, unsigned count)
 					}
 					remain --;
 				}
-				auto rd = pimpl->readBlock(buf.get());
+
+				auto rd = pimpl->block_size;
+				if (!pimpl->random_mode) {
+					// For random mode we skip reading
+					rd = pimpl->readBlock(buf.get());
+				}
 
 				if (rd > 0) {
 					auto n = pimpl->nonce->incAndGet();
