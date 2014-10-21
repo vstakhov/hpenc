@@ -21,6 +21,7 @@ OBJS=	auth_poly1305_donna.o \
 	onetimeauth_poly1305.o \
 	stream_chacha20_api.o \
 	stream_chacha20_ref.o \
+	stream_xchacha20.o \
 	verify_16.o \
 	verify_poly1305_donna.o
 	
@@ -28,25 +29,28 @@ all: libsodium_contrib.a
 
 libsodium_contrib.a: $(OBJS)
 	$(AR) $(ARFLAGS) libsodium_contrib.a $(OBJS)
-	
+
 auth_poly1305_donna.o: auth_poly1305_donna.c $(DEPS)
 	$(CC) $(CFLAGS) -c auth_poly1305_donna.c -o auth_poly1305_donna.o
 
 onetimeauth_poly1305.o: onetimeauth_poly1305.c $(DEPS)
 	$(CC) $(CFLAGS) -c onetimeauth_poly1305.c -o onetimeauth_poly1305.o
-	
+
 stream_chacha20_api.o: stream_chacha20_api.c $(DEPS)
 	$(CC) $(CFLAGS) -c stream_chacha20_api.c -o stream_chacha20_api.o
-	
+
 stream_chacha20_ref.o: stream_chacha20_ref.c $(DEPS)
 	$(CC) $(CFLAGS) -c stream_chacha20_ref.c -o stream_chacha20_ref.o
-	
+
+stream_xchacha20.o: stream_xchacha20.c $(DEPS)
+	$(CC) $(CFLAGS) -c stream_xchacha20.c -o stream_xchacha20.o
+
 verify_16.o: verify_16.c $(DEPS)
 	$(CC) $(CFLAGS) -c verify_16.c -o verify_16.o
 
 verify_poly1305_donna.o: verify_poly1305_donna.c $(DEPS)
 	$(CC) $(CFLAGS) -c verify_poly1305_donna.c -o verify_poly1305_donna.o
-	
+
 clean:
 	rm $(OBJS) libsodium_contrib.a || true
 
