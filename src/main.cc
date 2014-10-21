@@ -27,6 +27,7 @@
 #include "encrypt.h"
 #include "decrypt.h"
 #include "kdf.h"
+#include "nonce.h"
 #include <unistd.h>
 #include <iostream>
 #include <cstdlib>
@@ -155,6 +156,11 @@ int main(int argc, char **argv)
 		}
 		psk = util::genPSK(alg);
 
+		if (!psk) {
+			throw std::runtime_error("Cannot open /dev/urandom");
+			exit(EXIT_FAILURE);
+		}
+
 		if (!random_mode) {
 			std::cerr << "Random key: " << util::base32EncodeKey(psk.get())
 				  << std::endl;
@@ -165,7 +171,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	auto kdf = util::make_unique<HPEncKDF>(std::move(psk));
+	auto kdf = util::make_unique<HPEncKDF>(std::move(psk), nullptr);
 
 	if (decrypt) {
 		auto decrypter = util::make_unique<HPEncDecrypt>(std::move(kdf),

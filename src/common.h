@@ -64,9 +64,12 @@ const unsigned max_block = 16 * 1024 * 1024;
 
 const unsigned master_key_length = 32; // CHACHA20_POLY1305
 
+const char rndfile[] = "/dev/urandom";
+
 struct HPEncHeader {
 	AeadAlgorithm alg;
 	unsigned blen;
+	std::vector<byte> nonce;
 
 	HPEncHeader(AeadAlgorithm _alg, unsigned _blen) : alg(_alg), blen(_blen) {}
 	bool toFd(int fd, bool encode = false);

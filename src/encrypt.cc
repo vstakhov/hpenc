@@ -89,6 +89,7 @@ public:
 		encode = false;
 		pool.reset(new ThreadPool(nthreads));
 		io_bufs.resize(pool->size());
+		hdr.nonce = kdf->initialNonce();
 		auto klen = AeadKeyLengths[static_cast<int>(alg)];
 		auto key = kdf->genKey(klen);
 

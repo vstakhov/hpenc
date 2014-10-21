@@ -22,6 +22,11 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "nonce.h"
 #include "aead.h"
 
@@ -31,10 +36,16 @@ namespace hpenc
 class HPEncNonce::impl {
 public:
 	std::vector<byte> nonce;
+
 	impl(unsigned len)
 	{
 		nonce.resize(len);
-		nonce.insert(nonce.begin(), len, '\0');
+		nonce.assign(len, '\0');
+	}
+
+	impl(const std::vector<byte> &init)
+	{
+		nonce.assign(init.begin(), init.end());
 	}
 
 	void inc()
@@ -56,6 +67,10 @@ HPEncNonce::HPEncNonce(unsigned len) : pimpl(new impl(len))
 {
 }
 
+HPEncNonce::HPEncNonce(const std::vector<byte> &init) : pimpl(new impl(init))
+{
+}
+
 HPEncNonce::~HPEncNonce()
 {
 }
@@ -69,6 +84,28 @@ const std::vector<unsigned char>& HPEncNonce::incAndGet()
 const std::vector<unsigned char>& HPEncNonce::get()
 {
 	return pimpl->nonce;
+}
+
+bool HPEncNonce::randomize()
+{
+	auto rnd = ::open(rndfile, O_RDONLY);
+
+	if (rnd == -1) {
+		return false;
+	}
+	if (::read(rnd, pimpl->nonce.data(), pimpl->nonce.size()) == -1) {
+		::close(rnd);
+		return false;
+	}
+
+	::close(rnd);
+
+	return true;
+}
+
+unsigned HPEncNonce::size() const
+{
+	return pimpl->nonce.size();
 }
 
 } /* namespace hpenc */

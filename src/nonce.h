@@ -27,6 +27,7 @@
 
 #include <vector>
 #include <memory>
+#include "common.h"
 
 namespace hpenc
 {
@@ -37,10 +38,13 @@ private:
 	class impl;
 	std::unique_ptr<impl> pimpl;
 public:
-	HPEncNonce(unsigned size);
+	explicit HPEncNonce(unsigned size);
+	explicit HPEncNonce(const std::vector<byte> &init);
 	virtual ~HPEncNonce();
+	bool randomize();
 	const std::vector<unsigned char>& incAndGet();
 	const std::vector<unsigned char>& get();
+	unsigned size() const;
 };
 
 } /* namespace hpenc */

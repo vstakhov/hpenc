@@ -101,6 +101,7 @@ public:
 		auto alg = hdr->alg;
 
 		// Setup cipher
+		kdf->setNonce(hdr->nonce);
 		auto klen = AeadKeyLengths[static_cast<int>(alg)];
 		auto key = kdf->genKey(klen);
 

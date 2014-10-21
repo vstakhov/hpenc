@@ -34,15 +34,33 @@ class HPEncKDF::impl {
 public:
 	std::unique_ptr<HPEncNonce> nonce;
 	std::unique_ptr<SessionKey> psk;
+	std::vector<byte> initial_nonce;
 
-	impl(std::unique_ptr<SessionKey> &&_psk) : psk(std::move(_psk))
+	impl(std::unique_ptr<SessionKey> &&_psk,
+			std::unique_ptr<HPEncNonce> &&_nonce) : psk(std::move(_psk))
 	{
-		nonce.reset(new HPEncNonce(crypto_stream_chacha20_noncebytes()));
+		if (!_nonce) {
+			// Create random nonce
+			nonce.reset(new HPEncNonce(crypto_stream_xchacha20_NONCEBYTES));
+			if (!nonce->randomize()) {
+				throw std::runtime_error("Cannot create random nonce");
+			}
+		}
+		else {
+			if (_nonce->size() != crypto_stream_xchacha20_NONCEBYTES) {
+				throw std::runtime_error("Invalid nonce specified");
+			}
+			nonce.swap(_nonce);
+		}
+
+		// Save the initial nonce
+		initial_nonce = nonce->get();
 	}
 };
 
-HPEncKDF::HPEncKDF(std::unique_ptr<SessionKey> &&psk) :
-	pimpl(new impl(std::move(psk)))
+HPEncKDF::HPEncKDF(std::unique_ptr<SessionKey> &&psk,
+		std::unique_ptr<HPEncNonce> &&nonce) :
+	pimpl(new impl(std::move(psk), std::move(nonce)))
 {
 }
 
@@ -55,10 +73,25 @@ std::shared_ptr<SessionKey> HPEncKDF::genKey(unsigned keylen)
 	auto nonce = pimpl->nonce->incAndGet();
 	auto sk = std::make_shared<SessionKey>(keylen, 0);
 
-	crypto_stream_chacha20(sk->data(), sk->size(), nonce.data(),
+	crypto_stream_xchacha20(sk->data(), sk->size(), nonce.data(),
 		pimpl->psk->data());
 
 	return sk;
+}
+
+const std::vector<byte>& HPEncKDF::initialNonce() const
+{
+	return pimpl->initial_nonce;
+}
+
+void HPEncKDF::setNonce(const std::vector<byte> &nonce)
+{
+	auto n = util::make_unique<HPEncNonce>(nonce);
+	if (n->size() != crypto_stream_xchacha20_NONCEBYTES) {
+		throw std::runtime_error("Invalid nonce specified");
+	}
+
+	pimpl->nonce.swap(n);
 }
 
 } /* namespace hpenc */

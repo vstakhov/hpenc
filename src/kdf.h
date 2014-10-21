@@ -32,16 +32,21 @@
 namespace hpenc
 {
 
+class HPEncNonce;
+
 class HPEncKDF
 {
 private:
 	class impl;
 	std::unique_ptr<impl> pimpl;
 public:
-	explicit HPEncKDF(std::unique_ptr<SessionKey> &&psk);
+	explicit HPEncKDF(std::unique_ptr<SessionKey> &&psk,
+			std::unique_ptr<HPEncNonce> &&nonce);
 	virtual ~HPEncKDF();
 
+	void setNonce(const std::vector<byte> &nonce);
 	std::shared_ptr<SessionKey> genKey(unsigned keylen);
+	const std::vector<byte>& initialNonce() const;
 };
 
 } /* namespace hpenc */

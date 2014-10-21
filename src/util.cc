@@ -271,8 +271,6 @@ std::string hpenc::util::base64Encode(const byte *input, size_t len)
 	return encoded;
 }
 
-static const char *randomdev = "/dev/urandom";
-
 std::unique_ptr<SessionKey>
 hpenc::util::genPSK(AeadAlgorithm alg)
 {
@@ -281,7 +279,7 @@ hpenc::util::genPSK(AeadAlgorithm alg)
 	auto res = util::make_unique<SessionKey>();
 	res->resize(len);
 
-	auto rnd = open(randomdev, O_RDONLY);
+	auto rnd = open(rndfile, O_RDONLY);
 
 	if (rnd == -1) {
 		return nullptr;
@@ -300,9 +298,10 @@ struct HeaderWire {
 	char magic[8];
 	uint32_t alg;
 	uint32_t blocklen;
+	byte nonce[24];
 };
 
-static const char header_magic[8] = { 'h', 'p', 'e', 'n', 'c', 0, 0, 0 };
+static const char header_magic[8] = { 'h', 'p', 'e', 'n', 'c', 0, 0, 1 };
 
 bool hpenc::HPEncHeader::toFd(int fd, bool encode)
 {
@@ -315,6 +314,11 @@ bool hpenc::HPEncHeader::toFd(int fd, bool encode)
 	::memcpy(hdr.magic, header_magic, sizeof(hdr.magic));
 	hdr.alg = htonl(static_cast<uint32_t>(alg));
 	hdr.blocklen = htonl(blen);
+
+	if (nonce.size() != sizeof(hdr.nonce)) {
+		throw std::runtime_error("Wire nonce length is not equal to internal one");
+	}
+	std::copy(std::begin(nonce), std::end(nonce), hdr.nonce);
 
 	if (encode) {
 		auto out = util::base64Encode(reinterpret_cast<byte *>(&hdr), sizeof(hdr));
@@ -345,6 +349,9 @@ std::unique_ptr<HPEncHeader> hpenc::HPEncHeader::fromFd(int fd, bool encode)
 
 	auto res = util::make_unique<HPEncHeader>(alg, blen);
 
+	res->nonce.resize(sizeof(in.nonce));
+	std::copy(std::begin(in.nonce), std::end(in.nonce), std::begin(res->nonce));
+
 	return std::move(res);
 }
 
@@ -367,6 +374,7 @@ hpenc::util::atomicRead(int fd, byte *buf, size_t n)
 			return pos;
 		default:
 			pos += (u_int)res;
+			break;
 		}
 	}
 	return pos;
@@ -391,6 +399,7 @@ hpenc::util::atomicWrite(int fd, const byte *buf, size_t n)
 			return pos;
 		default:
 			pos += (u_int)res;
+			break;
 		}
 	}
 	return pos;
