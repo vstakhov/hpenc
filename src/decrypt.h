@@ -46,7 +46,7 @@ public:
 			unsigned nthreads = 0);
 	virtual ~HPEncDecrypt();
 
-	void decrypt(bool encode = false) throw(std::runtime_error);
+	void decrypt(bool encode = false, unsigned count = 0) throw(std::runtime_error);
 };
 
 } /* namespace hpenc */

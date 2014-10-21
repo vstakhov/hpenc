@@ -156,10 +156,11 @@ HPEncEncrypt::~HPEncEncrypt()
 {
 }
 
-void HPEncEncrypt::encrypt(bool encode)
+void HPEncEncrypt::encrypt(bool encode, unsigned count)
 {
 	pimpl->encode = encode;
 	bool last = false;
+	auto remain = count;
 
 	if (pimpl->random_mode || pimpl->writeHeader()) {
 		auto nblocks = 0U;
@@ -168,6 +169,13 @@ void HPEncEncrypt::encrypt(bool encode)
 			std::vector< std::future<ssize_t> > results;
 			auto i = 0U;
 			for (auto &buf : pimpl->io_bufs) {
+				if (count > 0) {
+					if (remain == 0) {
+						last = true;
+						break;
+					}
+					remain --;
+				}
 				auto rd = pimpl->readBlock(buf.get());
 
 				if (rd > 0) {
@@ -210,12 +218,16 @@ void HPEncEncrypt::encrypt(bool encode)
 							}
 						}
 					}
-					if (rd < pimpl->block_size || last) {
+					if (rd < pimpl->block_size) {
 						// We are done
 						return;
 					}
 				}
 				i++;
+			}
+
+			if (last) {
+				return;
 			}
 
 			if (++nblocks % rekey_blocks == 0) {

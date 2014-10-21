@@ -165,14 +165,22 @@ HPEncDecrypt::~HPEncDecrypt()
 {
 }
 
-void HPEncDecrypt::decrypt(bool encode) throw(std::runtime_error)
+void HPEncDecrypt::decrypt(bool encode, unsigned count) throw(std::runtime_error)
 {
 	pimpl->encode = encode;
 	bool last = false;
+	auto remain = count;
 
 	if (pimpl->readHeader()) {
 		auto nblocks = 0U;
 		for (;;) {
+			if (count > 0) {
+				if (remain == 0) {
+					last = true;
+					break;
+				}
+				remain --;
+			}
 			auto blocks_read = 0;
 			std::vector< std::future<ssize_t> > results;
 			auto i = 0U;

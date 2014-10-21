@@ -35,10 +35,19 @@ using namespace hpenc;
 
 static void usage(char **argv)
 {
-	std::cerr 	<< "Usage: " << argv[0] << " [-h] [-d] [-a algorithm] [-k key] [psk] "
-				<< "[-b block_size] [-B] [psk]"
-				<< std::endl;
-	::exit(EXIT_FAILURE);
+	std::cerr 	<< "Usage: " << argv[0] << " [-h] [-d] [-a algorithm] [-k key] "
+				<< "[-b block_size] [-B] [-r] [-c count] [psk]"
+				<< std::endl
+				<< "Available options: " << std::endl
+				<< "  -d                   Decrypt data" << std::endl
+				<< "  -a <algorithm>       Use specified algorithm: chacha20," << std::endl
+				<< "                       aes-128 or aes-256" << std::endl
+				<< "  -k <key>             52 bytes hex encoded pre-shared key" << std::endl
+				<< "  -b <block_size>      Block size to use (default: 4K)" << std::endl
+				<< "  -B                   Base64 output/input" << std::endl
+				<< "  -r                   Act as pseudo-random generator" << std:: endl
+				<< "  -c <count>           Process <count> of blocks (default: no limit)" << std::endl;
+ 	::exit(EXIT_FAILURE);
 }
 
 static AeadAlgorithm
@@ -64,9 +73,10 @@ int main(int argc, char **argv)
 	bool encode = false;
 	bool decrypt = false;
 	bool random_mode = false;
+	unsigned count = 0;
 	unsigned nthreads = 0;
 
-	while ((opt = ::getopt(argc, argv, "ha:b:k:Bdn:r")) != -1) {
+	while ((opt = ::getopt(argc, argv, "ha:b:k:Bdn:rc:")) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv);
@@ -113,6 +123,25 @@ int main(int argc, char **argv)
 			break;
 		case 'r':
 			random_mode = true;
+			break;
+		case 'c':
+			count = strtoul(optarg, &err_str, 10);
+			if (err_str && *err_str != '\0') {
+				switch (*err_str) {
+				case 'K':
+				case 'k':
+					count *= 1024;
+					break;
+				case 'M':
+				case 'm':
+					count *= 1024 * 1024;
+					break;
+				default:
+					usage(argv);
+					break;
+				}
+			}
+			break;
 		}
 	}
 
@@ -126,8 +155,10 @@ int main(int argc, char **argv)
 		}
 		psk = util::genPSK(alg);
 
-		std::cerr << "Random key: " << util::base32EncodeKey(psk.get())
+		if (!random_mode) {
+			std::cerr << "Random key: " << util::base32EncodeKey(psk.get())
 				  << std::endl;
+		}
 		// Just print key
 		if (argc == 1 && std::string(argv[0]).find("psk") != std::string::npos) {
 			exit(EXIT_SUCCESS);
@@ -139,13 +170,13 @@ int main(int argc, char **argv)
 	if (decrypt) {
 		auto decrypter = util::make_unique<HPEncDecrypt>(std::move(kdf),
 				std::string(""), std::string(""));
-		decrypter->decrypt(encode);
+		decrypter->decrypt(encode, count);
 	}
 	else {
 		auto encrypter = util::make_unique<HPEncEncrypt>(std::move(kdf),
 			std::string(""), std::string(""),
 			alg, block_size, nthreads, random_mode);
-		encrypter->encrypt(encode);
+		encrypter->encrypt(encode, count);
 	}
 
 	return 0;

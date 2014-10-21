@@ -49,7 +49,7 @@ public:
 			bool random_mode = false);
 	virtual ~HPEncEncrypt();
 
-	void encrypt(bool encode = false);
+	void encrypt(bool encode = false, unsigned count = 0);
 };
 
 } /* namespace hpenc */
