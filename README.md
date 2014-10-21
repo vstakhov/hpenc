@@ -104,8 +104,8 @@ are supported via `openssl` library (openssl must be >= 1.0.1)
 significantly faster in case of generic hardware.
 
 Internally, `hpenc` uses pre-shared key for key derivation only. For this purposes, it applies
-`chacha20` stream cipher to a string of all zeroes using this pre-shared key as key and monotonically
-increasing counter as nonce. This allows up to 2^64 unique session keys that are used for bulk encryption.
+`xchacha20` stream cipher to a string of all zeroes using this pre-shared key as key and monotonically
+increasing counter as nonce, the inital nonce is encoded to the message's header and is chosen randomly.
 
 During bulk encryption `hpenc` splits input into blocks of data. Each block is appended with MAC tag calculated
 from the encrypted content and non-encrypted portion that represents the length of the current block. So far,
@@ -113,13 +113,14 @@ data content and length are both authenticated.
 
 Each block is encrypted using monotonically increasing counter as nonce. This counter starts from `1` and can count up
 to 2^64 (depending on ciphers) allowing thus up to 2^64 blocks being encrypted. However, `hpenc` also derives new key
-each 1024 blocks removing this limitation as well.
+each 4096 blocks removing this limitation as well.
 
 `hpenc` append a small header to each stream encrypted which helps decrypter to figure out the following attributes:
 
-1. magic of the stream (`'hpenc' \0 \0 \0`, 8 bytes)
+1. magic of the stream and version (`'hpenc' \0 \0 \1`, 8 bytes)
 2. algorithm code (network byte order, 4 bytes)
 3. block length (network byte order, 4 bytes)
+4. initial nonce/salt for deriving keys (24 bytes)
 
 Therefore, the overall overhead of encryption is calculated as following:
 
@@ -127,7 +128,7 @@ Therefore, the overall overhead of encryption is calculated as following:
 (nblocks) * (mac_length) + 16
 ~~~
 
-So far, for 1Gb stream and 1Mb block size it is `(16 * 1024 + 16)` ~= 16K 
+So far, for 1Gb stream and 1Mb block size it is `(16 * 1024 + 40)` ~= 16K 
 
 ## PRF security
 
