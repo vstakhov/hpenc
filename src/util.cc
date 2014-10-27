@@ -463,6 +463,7 @@ restart:
 
 	/* Now read a passphrase */
 	/* Avoid resize */
+	res.reset(new std::vector<byte>());
 	res->reserve(max_len);
 	auto rd = 0U;
 	while (read(input, &ch, 1) == 1 && ch != '\n' && ch != '\r' && rd < max_len) {

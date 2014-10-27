@@ -87,6 +87,10 @@ std::shared_ptr<SessionKey> HPEncKDF::genKey(unsigned keylen)
 		PKCS5_PBKDF2_HMAC((const char*)passwd->data(), passwd->size(),
 				nonce.data(), nonce.size(), pbkdf_iters, EVP_sha512(),
 				 pimpl->psk->size(), pimpl->psk->data());
+		// Cleanup password
+		for (volatile auto &c: (*passwd)) {
+			c = '\0';
+		}
 		pimpl->password = false;
 	}
 	crypto_stream_xchacha20(sk->data(), sk->size(), nonce.data(),

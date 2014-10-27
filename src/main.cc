@@ -36,7 +36,7 @@ using namespace hpenc;
 
 static void usage(char **argv)
 {
-	std::cerr 	<< "Usage: " << argv[0] << " [-h] [-d] [-a algorithm] [-k key] "
+	std::cerr 	<< "Usage: " << argv[0] << " [-h] [-d] [-a algorithm] [-k key|-p] "
 				<< "[-b block_size] [-B] [-r] [-c count] [psk]"
 				<< std::endl
 				<< "Available options: " << std::endl
@@ -44,6 +44,7 @@ static void usage(char **argv)
 				<< "  -a <algorithm>       Use specified algorithm: chacha20," << std::endl
 				<< "                       aes-128 or aes-256" << std::endl
 				<< "  -k <key>             52 bytes hex encoded pre-shared key" << std::endl
+				<< "  -p                   Read password from the terminal instead of key" << std::endl
 				<< "  -b <block_size>      Block size to use (default: 4K)" << std::endl
 				<< "  -B                   Base64 output/input" << std::endl
 				<< "  -r                   Act as pseudo-random generator" << std:: endl
@@ -74,10 +75,11 @@ int main(int argc, char **argv)
 	bool encode = false;
 	bool decrypt = false;
 	bool random_mode = false;
+	bool password = false;
 	unsigned count = 0;
 	unsigned nthreads = 0;
 
-	while ((opt = ::getopt(argc, argv, "ha:b:k:Bdn:rc:")) != -1) {
+	while ((opt = ::getopt(argc, argv, "ha:b:pk:Bdn:rc:")) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv);
@@ -105,6 +107,10 @@ int main(int argc, char **argv)
 			break;
 		case 'k':
 		{
+			if (psk) {
+				throw std::runtime_error("Key/password has been already specified");
+				exit(EXIT_FAILURE);
+			}
 			std::string key_base32(optarg);
 			auto decoded = util::base32DecodeKey(key_base32);
 			if (!decoded || decoded->size() != master_key_length) {
@@ -143,6 +149,25 @@ int main(int argc, char **argv)
 				}
 			}
 			break;
+		case 'p':
+		{
+			password = true;
+			if (psk) {
+				throw std::runtime_error("Key/password has been already specified");
+				exit(EXIT_FAILURE);
+			}
+			auto passwd = util::readPassphrase();
+			if (!passwd || passwd->size() == 0) {
+				throw std::runtime_error("Password is invalid");
+			}
+			if (passwd->size() < 6) {
+				// XXX: validate it more precisely
+				throw std::runtime_error("Password is too short "
+						"(6 characters at least are required)");
+			}
+			std::swap(psk, passwd);
+			break;
+		}
 		}
 	}
 
@@ -171,7 +196,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	auto kdf = util::make_unique<HPEncKDF>(std::move(psk), nullptr);
+	auto kdf = util::make_unique<HPEncKDF>(std::move(psk), nullptr, password);
 
 	if (decrypt) {
 		auto decrypter = util::make_unique<HPEncDecrypt>(std::move(kdf),
