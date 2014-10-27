@@ -413,7 +413,7 @@ hpenc::util::atomicWrite(int fd, const byte *buf, size_t n)
 	return pos;
 }
 
-std::unique_ptr<std::string>
+std::unique_ptr<std::vector<byte> >
 hpenc::util::readPassphrase()
 {
 	struct sigaction sa, savealrm, saveint, savehup, savequit, saveterm;
@@ -421,7 +421,7 @@ hpenc::util::readPassphrase()
 	struct termios oterm;
 	int input, output, i;
 	char ch;
-	std::unique_ptr<std::string> res;
+	std::unique_ptr<std::vector<byte> > res;
 	static volatile sig_atomic_t saved_signo[NSIG];
 	static const unsigned max_len = 4096;
 

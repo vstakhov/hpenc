@@ -26,6 +26,7 @@
 #include "nonce.h"
 #include "util.h"
 #include <crypto_stream_chacha20.h>
+#include <openssl/evp.h>
 
 namespace hpenc
 {
@@ -35,9 +36,11 @@ public:
 	std::unique_ptr<HPEncNonce> nonce;
 	std::unique_ptr<SessionKey> psk;
 	std::vector<byte> initial_nonce;
+	bool password;
 
 	impl(std::unique_ptr<SessionKey> &&_psk,
-			std::unique_ptr<HPEncNonce> &&_nonce) : psk(std::move(_psk))
+			std::unique_ptr<HPEncNonce> &&_nonce,
+			bool _password) : psk(std::move(_psk)), password(_password)
 	{
 		if (!_nonce) {
 			// Create random nonce
@@ -59,8 +62,8 @@ public:
 };
 
 HPEncKDF::HPEncKDF(std::unique_ptr<SessionKey> &&psk,
-		std::unique_ptr<HPEncNonce> &&nonce) :
-	pimpl(new impl(std::move(psk), std::move(nonce)))
+		std::unique_ptr<HPEncNonce> &&nonce, bool password) :
+	pimpl(new impl(std::move(psk), std::move(nonce), password))
 {
 }
 
@@ -72,7 +75,20 @@ std::shared_ptr<SessionKey> HPEncKDF::genKey(unsigned keylen)
 {
 	auto nonce = pimpl->nonce->incAndGet();
 	auto sk = std::make_shared<SessionKey>(keylen, 0);
+	const int pbkdf_iters = 65536;
 
+	if (pimpl->password) {
+		// We need to derive key from password first of all
+		std::unique_ptr<SessionKey> passwd;
+		std::swap(pimpl->psk, passwd);
+		pimpl->psk = util::make_unique<SessionKey>();
+		pimpl->psk->resize(crypto_stream_xchacha20_KEYBYTES);
+		// Now derive using openssl
+		PKCS5_PBKDF2_HMAC((const char*)passwd->data(), passwd->size(),
+				nonce.data(), nonce.size(), pbkdf_iters, EVP_sha512(),
+				 pimpl->psk->size(), pimpl->psk->data());
+		pimpl->password = false;
+	}
 	crypto_stream_xchacha20(sk->data(), sk->size(), nonce.data(),
 		pimpl->psk->data());
 
