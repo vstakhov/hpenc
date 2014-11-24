@@ -23,9 +23,9 @@
 
 #include <openssl/evp.h>
 
-#include <crypto_onetimeauth_poly1305.h>
-#include <crypto_stream_chacha20.h>
-#include <crypto_verify_16.h>
+#include <chacha.h>
+#include <poly1305.h>
+#include <cstring>
 #include "aead.h"
 #include "util.h"
 
@@ -173,7 +173,8 @@ public:
 class Chacha20Poly1305AeadCipher: public AeadCipher
 {
 private:
-	crypto_onetimeauth_poly1305_state state;
+	chacha_state enc;
+	poly1305_state mac;
 
 	static inline void _u64_le_from_ull(unsigned char out[8U],
 			unsigned long long x)
@@ -207,29 +208,55 @@ public:
 
 		byte block0[64];
 		auto tag = util::make_unique < MacTag >(taglen());
-		byte slen[8];
+		//byte slen[8];
 
+		::memset(block0, 0, sizeof(block0));
+		chacha_init(&enc, (const chacha_key *)key->data(),
+				(const chacha_iv *)nonce, 20);
 		// Set poly1305 key
-		crypto_stream_chacha20(block0, sizeof block0, nonce, key->data());
-		crypto_onetimeauth_poly1305_init(&state, block0);
-		sodium_memzero(block0, sizeof block0);
+		chacha_update(&enc, block0, block0, sizeof(block0));
+		poly1305_init(&mac, (const poly1305_key *)block0);
 
 		if (aadlen > 0) {
 			// Add unencrypted data
-			crypto_onetimeauth_poly1305_update(&state, aad, aadlen);
-			_u64_le_from_ull(slen, aadlen);
-			crypto_onetimeauth_poly1305_update(&state, slen, sizeof slen);
+			poly1305_update(&mac, aad, aadlen);
+			// We don't care about endiannes here for speed
+			//_u64_le_from_ull(slen, aadlen);
+			poly1305_update(&mac, (byte *)&aadlen, sizeof(aadlen));
 		}
 		// Encrypt
-		crypto_stream_chacha20_xor_ic(out, in, inlen, nonce, 1U, key->data());
+		auto encrypted = chacha_update(&enc, in, out, inlen);
+		chacha_final(&enc, out + encrypted);
 		// Final tag
-		crypto_onetimeauth_poly1305_update(&state, out, inlen);
-		_u64_le_from_ull(slen, inlen);
-		crypto_onetimeauth_poly1305_update(&state, slen, sizeof slen);
-		crypto_onetimeauth_poly1305_final(&state, tag->data);
-		sodium_memzero(&state, sizeof state);
+		poly1305_update(&mac, out, inlen);
+		//_u64_le_from_ull(slen, inlen);
+		poly1305_update(&mac, (byte *)&inlen, sizeof(inlen));
+		poly1305_finish(&mac, tag->data);
 
 		return tag;
+	}
+
+	int verify_16(const unsigned char *x,const unsigned char *y)
+	{
+	  unsigned int differentbits = 0;
+	#define F(i) differentbits |= x[i] ^ y[i];
+	  F(0)
+	  F(1)
+	  F(2)
+	  F(3)
+	  F(4)
+	  F(5)
+	  F(6)
+	  F(7)
+	  F(8)
+	  F(9)
+	  F(10)
+	  F(11)
+	  F(12)
+	  F(13)
+	  F(14)
+	  F(15)
+	  return (1 & ((differentbits - 1) >> 8)) - 1;
 	}
 
 	virtual bool decrypt(const byte *aad, size_t aadlen, const byte *nonce,
@@ -237,49 +264,53 @@ public:
 			const MacTag *tag) override
 	{
 		byte block0[64];
-		byte slen[8];
+		//byte slen[8];
 		auto test_tag = util::make_unique < MacTag >(taglen());
 
+		::memset(block0, 0, sizeof(block0));
+		chacha_init(&enc, (const chacha_key *)key->data(),
+				(const chacha_iv *)nonce, 20);
 		// Set poly1305 key
-		crypto_stream_chacha20(block0, sizeof block0, nonce, key->data());
-		crypto_onetimeauth_poly1305_init(&state, block0);
-		sodium_memzero(block0, sizeof block0);
+		chacha_update(&enc, block0, block0, sizeof(block0));
+		poly1305_init(&mac, (const poly1305_key *)block0);
 
 		if (aadlen > 0) {
-			crypto_onetimeauth_poly1305_update(&state, aad, aadlen);
-			_u64_le_from_ull(slen, aadlen);
-			crypto_onetimeauth_poly1305_update(&state, slen, sizeof slen);
+			// Add unencrypted data
+			poly1305_update(&mac, aad, aadlen);
+			// We don't care about endiannes here for speed
+			//_u64_le_from_ull(slen, aadlen);
+			poly1305_update(&mac, (byte *)&aadlen, sizeof(aadlen));
 		}
-		crypto_onetimeauth_poly1305_update(&state, in, inlen);
-		_u64_le_from_ull(slen, inlen);
-		crypto_onetimeauth_poly1305_update(&state, slen, sizeof slen);
-		crypto_onetimeauth_poly1305_final(&state, test_tag->data);
-		sodium_memzero(&state, sizeof state);
+		// Final tag
+		poly1305_update(&mac, out, inlen);
+		//_u64_le_from_ull(slen, inlen);
+		poly1305_update(&mac, (byte *)&inlen, sizeof(inlen));
+		poly1305_finish(&mac, test_tag->data);
 
-		auto ret = crypto_verify_16(test_tag->data, tag->data);
+		auto ret = verify_16(test_tag->data, tag->data);
 		if (ret != 0) {
-			sodium_memzero(out, inlen);
+			memset(out, 0, inlen);
 			return false;
 		}
 
-		crypto_stream_chacha20_xor_ic(out, in, inlen, nonce, 1U, key->data());
+		auto decrypted = chacha_update(&enc, in, out, inlen);
+		chacha_final(&enc, out + decrypted);
 
 		return true;
 	}
 
 	virtual size_t taglen() const override
 	{
-		return
-		crypto_onetimeauth_poly1305_BYTES;
+		return 16;
 	}
 	virtual size_t keylen() const override
 	{
-		return crypto_stream_chacha20_keybytes();
+		return sizeof(chacha_key);
 	}
 
 	virtual size_t noncelen() const override
 	{
-		return crypto_stream_chacha20_noncebytes();
+		return sizeof(chacha_iv);
 	}
 };
 
