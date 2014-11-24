@@ -25,11 +25,13 @@
 #include "kdf.h"
 #include "nonce.h"
 #include "util.h"
-#include <crypto_stream_chacha20.h>
+#include <chacha.h>
 #include <openssl/evp.h>
 
 namespace hpenc
 {
+
+static constexpr const int nonce_bytes = 24;
 
 class HPEncKDF::impl {
 public:
@@ -44,13 +46,13 @@ public:
 	{
 		if (!_nonce) {
 			// Create random nonce
-			nonce.reset(new HPEncNonce(crypto_stream_xchacha20_NONCEBYTES));
+			nonce.reset(new HPEncNonce(nonce_bytes));
 			if (!nonce->randomize()) {
 				throw std::runtime_error("Cannot create random nonce");
 			}
 		}
 		else {
-			if (_nonce->size() != crypto_stream_xchacha20_NONCEBYTES) {
+			if (_nonce->size() != nonce_bytes) {
 				throw std::runtime_error("Invalid nonce specified");
 			}
 			nonce.swap(_nonce);
@@ -82,7 +84,7 @@ std::shared_ptr<SessionKey> HPEncKDF::genKey(unsigned keylen)
 		std::unique_ptr<SessionKey> passwd;
 		std::swap(pimpl->psk, passwd);
 		pimpl->psk = util::make_unique<SessionKey>();
-		pimpl->psk->resize(crypto_stream_xchacha20_KEYBYTES);
+		pimpl->psk->resize(nonce_bytes);
 		// Now derive using openssl
 		PKCS5_PBKDF2_HMAC((const char*)passwd->data(), passwd->size(),
 				nonce.data(), nonce.size(), pbkdf_iters, EVP_sha512(),
@@ -93,8 +95,9 @@ std::shared_ptr<SessionKey> HPEncKDF::genKey(unsigned keylen)
 		}
 		pimpl->password = false;
 	}
-	crypto_stream_xchacha20(sk->data(), sk->size(), nonce.data(),
-		pimpl->psk->data());
+	xchacha((const chacha_key *)pimpl->psk->data(),
+			(const chacha_iv24 *)nonce.data(),
+			sk->data(), sk->data(), sk->size(), 20);
 
 	return sk;
 }
@@ -107,7 +110,7 @@ const std::vector<byte>& HPEncKDF::initialNonce() const
 void HPEncKDF::setNonce(const std::vector<byte> &nonce)
 {
 	auto n = util::make_unique<HPEncNonce>(nonce);
-	if (n->size() != crypto_stream_xchacha20_NONCEBYTES) {
+	if (n->size() != nonce_bytes) {
 		throw std::runtime_error("Invalid nonce specified");
 	}
 
