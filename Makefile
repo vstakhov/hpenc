@@ -8,10 +8,10 @@ subdirs: chacha-opt/bin/chacha.lib poly1305-opt/bin/poly1305.lib
 	done
 
 chacha-opt/bin/chacha.lib: chacha-opt/asmopt.mak
-	(cd chacha-opt ; make lib)
+	(cd chacha-opt ; $(MAKE) lib)
 
 poly1305-opt/bin/poly1305.lib: poly1305-opt/asmopt.mak
-	(cd poly1305-opt ; make lib)
+	(cd poly1305-opt ; $(MAKE) lib)
 
 clean: chacha-opt/asmopt.mak poly1305-opt/asmopt.mak
 	for dir in $(SUBDIRS) chacha-opt poly1305-opt ; do \
