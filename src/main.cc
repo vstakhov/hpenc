@@ -28,6 +28,8 @@
 #include "decrypt.h"
 #include "kdf.h"
 #include "nonce.h"
+#include <chacha.h>
+#include <poly1305.h>
 #include <unistd.h>
 #include <iostream>
 #include <cstdlib>
@@ -173,6 +175,9 @@ int main(int argc, char **argv)
 
 	argv += optind;
 	argc -= optind;
+
+	chacha_startup();
+	poly1305_startup();
 
 	if (!psk) {
 		if (decrypt) {
