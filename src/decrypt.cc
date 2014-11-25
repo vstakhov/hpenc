@@ -48,7 +48,7 @@ public:
 	std::unique_ptr<HPEncNonce> nonce;
 	int fd_in, fd_out;
 	unsigned block_size;
-	std::vector<std::shared_ptr <std::vector<byte> > > io_bufs;
+	std::vector<std::shared_ptr <aligned_vector > > io_bufs;
 	std::vector <std::shared_ptr<HPencAead> > ciphers;
 	bool encode;
 	std::unique_ptr<ThreadPool> pool;
@@ -113,19 +113,19 @@ public:
 				nonce.reset(new HPEncNonce(cipher->noncelen()));
 			}
 			ciphers.push_back(cipher);
-			io_bufs[i] = std::make_shared<std::vector<byte> >();
+			io_bufs[i] = std::make_shared<aligned_vector>();
 			io_bufs[i]->resize(block_size + cipher->taglen());
 		}
 
 		return true;
 	}
 
-	bool writeBlock(ssize_t rd, std::vector<byte> *io_buf)
+	bool writeBlock(ssize_t rd, aligned_vector *io_buf)
 	{
 		return util::atomicWrite(fd_out, io_buf->data(), rd) > 0;
 	}
 
-	ssize_t readBlock(size_t rd, std::vector<byte> *io_buf,
+	ssize_t readBlock(size_t rd, aligned_vector *io_buf,
 			const std::vector<byte> &n, std::shared_ptr<HPencAead> const &cipher)
 	{
 		if (rd > 0) {

@@ -27,6 +27,9 @@
 #include <cstdlib>
 #include <memory>
 #include <limits>
+#include <vector>
+
+namespace hpenc {
 
 template <typename T, std::size_t Alignment>
 class aligned_allocator
@@ -115,5 +118,8 @@ public:
 private:
 	aligned_allocator& operator=(const aligned_allocator&);
 };
+// Potentially use avx512 allocation
+using aligned_vector = std::vector<byte, aligned_allocator<byte, 64> >;
+}
 
 #endif /* ALIGNED_ALLOC_H_ */
