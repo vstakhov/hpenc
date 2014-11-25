@@ -37,6 +37,7 @@
 #include "util.h"
 #include "kdf.h"
 #include "thread_pool.h"
+#include "aligned_alloc.h"
 
 namespace hpenc
 {
