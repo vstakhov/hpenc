@@ -104,7 +104,7 @@ The maximum size of a block is limited to 16 megabytes (because we need to chang
 
 ## Performance results
 
-Hardware used: Intel Xeon E3 (Sandy Bridge), 4 physical cores, 8 logical cores
+Hardware used: Intel(R) Core(TM) i7-4770K CPU @ 3.50GHz (thanks to [openwall](http://openwall.com) for the hardware provided)
 
 * Graph of dependency of encryption throughput on the input block size:
 
