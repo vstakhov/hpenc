@@ -173,8 +173,8 @@ public:
 class Chacha20Poly1305AeadCipher: public AeadCipher
 {
 private:
-	chacha_state enc;
-	poly1305_state mac;
+	alignas(64) chacha_state enc_state;
+	alignas(64) poly1305_state mac;
 
 	static inline void _u64_le_from_ull(unsigned char out[8U],
 			unsigned long long x)
@@ -211,10 +211,10 @@ public:
 		//byte slen[8];
 
 		::memset(block0, 0, sizeof(block0));
-		chacha_init(&enc, (const chacha_key *)key->data(),
+		chacha_init(&enc_state, (const chacha_key *)key->data(),
 				(const chacha_iv *)nonce, 20);
 		// Set poly1305 key
-		chacha_update(&enc, block0, block0, sizeof(block0));
+		chacha_update(&enc_state, block0, block0, sizeof(block0));
 		poly1305_init(&mac, (const poly1305_key *)block0);
 
 		if (aadlen > 0) {
@@ -225,8 +225,8 @@ public:
 			poly1305_update(&mac, (byte *)&aadlen, sizeof(aadlen));
 		}
 		// Encrypt
-		auto encrypted = chacha_update(&enc, in, out, inlen);
-		chacha_final(&enc, out + encrypted);
+		auto encrypted = chacha_update(&enc_state, in, out, inlen);
+		chacha_final(&enc_state, out + encrypted);
 		// Final tag
 		poly1305_update(&mac, out, inlen);
 		//_u64_le_from_ull(slen, inlen);
@@ -268,10 +268,10 @@ public:
 		auto test_tag = util::make_unique < MacTag >(taglen());
 
 		::memset(block0, 0, sizeof(block0));
-		chacha_init(&enc, (const chacha_key *)key->data(),
+		chacha_init(&enc_state, (const chacha_key *)key->data(),
 				(const chacha_iv *)nonce, 20);
 		// Set poly1305 key
-		chacha_update(&enc, block0, block0, sizeof(block0));
+		chacha_update(&enc_state, block0, block0, sizeof(block0));
 		poly1305_init(&mac, (const poly1305_key *)block0);
 
 		if (aadlen > 0) {
@@ -293,8 +293,8 @@ public:
 			return false;
 		}
 
-		auto decrypted = chacha_update(&enc, in, out, inlen);
-		chacha_final(&enc, out + decrypted);
+		auto decrypted = chacha_update(&enc_state, in, out, inlen);
+		chacha_final(&enc_state, out + decrypted);
 
 		return true;
 	}
