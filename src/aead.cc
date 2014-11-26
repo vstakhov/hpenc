@@ -206,7 +206,7 @@ public:
 			byte *out) override
 	{
 
-		byte block0[64];
+		alignas(64) byte block0[64];
 		auto tag = util::make_unique < MacTag >(taglen());
 		//byte slen[8];
 
@@ -263,7 +263,7 @@ public:
 			size_t nlen, const byte *in, size_t inlen, byte *out,
 			const MacTag *tag) override
 	{
-		byte block0[64];
+		alignas(64) byte block0[64];
 		//byte slen[8];
 		auto test_tag = util::make_unique < MacTag >(taglen());
 
