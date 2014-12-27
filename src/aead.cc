@@ -71,18 +71,20 @@ private:
 	std::unique_ptr<EVP_CIPHER_CTX> ctx_dec;
 	const EVP_CIPHER *alg;
 	AeadAlgorithm alg_num;
+	bool random_mode;
 public:
-	OpenSSLAeadCipher(AeadAlgorithm _alg) : AeadCipher()
+	OpenSSLAeadCipher(AeadAlgorithm _alg, bool _rm)
+		: AeadCipher(), random_mode(_rm)
 	{
 		ctx_enc.reset(EVP_CIPHER_CTX_new());
 		ctx_dec.reset(EVP_CIPHER_CTX_new());
 
 		switch(_alg) {
 		case AeadAlgorithm::AES_GCM_128:
-			alg = EVP_aes_128_gcm();
+			alg = _rm ? EVP_aes_128_ctr() : EVP_aes_128_gcm();
 			break;
 		case AeadAlgorithm::AES_GCM_256:
-			alg = EVP_aes_256_gcm();
+			alg = _rm ? EVP_aes_256_ctr() : EVP_aes_256_gcm();
 			break;
 		default:
 			alg = nullptr;
@@ -105,7 +107,7 @@ public:
 		EVP_CIPHER_CTX_ctrl(ctx_ptr, EVP_CTRL_GCM_SET_IVLEN, nlen, NULL);
 		EVP_EncryptInit_ex(ctx_ptr, NULL, NULL, key->data(),
 				(const unsigned char*) nonce);
-		if (aadlen > 0) {
+		if (!random_mode && aadlen > 0) {
 			// Add unencrypted data
 			EVP_EncryptUpdate(ctx_ptr, NULL, &howmany,
 					(const unsigned char*) aad, aadlen);
@@ -115,10 +117,14 @@ public:
 				(const unsigned char *) in, inlen);
 		EVP_EncryptFinal_ex(ctx_ptr, (unsigned char *) out, &howmany);
 		// Get tag
-		auto tag = util::make_unique < MacTag >(taglen());
-		EVP_CIPHER_CTX_ctrl(ctx_ptr, EVP_CTRL_GCM_GET_TAG, 16, tag->data);
+		if (!random_mode) {
+			auto tag = util::make_unique < MacTag >(taglen());
+			EVP_CIPHER_CTX_ctrl(ctx_ptr, EVP_CTRL_GCM_GET_TAG, 16, tag->data);
 
-		return tag;
+			return tag;
+		}
+
+		return nullptr;
 	}
 
 	virtual bool decrypt(const byte *aad, size_t aadlen, const byte *nonce,
@@ -175,6 +181,7 @@ class Chacha20Poly1305AeadCipher: public AeadCipher
 private:
 	alignas(64) chacha_state enc_state;
 	alignas(64) poly1305_state mac;
+	bool random_mode;
 
 	static inline void _u64_le_from_ull(unsigned char out[8U],
 			unsigned long long x)
@@ -196,8 +203,8 @@ private:
 		out[7] = (unsigned char) (x & 0xff);
 	}
 public:
-	Chacha20Poly1305AeadCipher(AeadAlgorithm _alg) :
-			AeadCipher()
+	Chacha20Poly1305AeadCipher(AeadAlgorithm _alg, bool _rm) :
+			AeadCipher(), random_mode(_rm)
 	{
 	}
 
@@ -206,34 +213,45 @@ public:
 			byte *out) override
 	{
 
-		alignas(64) byte block0[64];
-		auto tag = util::make_unique < MacTag >(taglen());
-		//byte slen[8];
+		if (!random_mode) {
+			alignas(64) byte block0[64];
+			auto tag = util::make_unique < MacTag >(taglen());
+			//byte slen[8];
 
-		::memset(block0, 0, sizeof(block0));
-		chacha_init(&enc_state, (const chacha_key *)key->data(),
-				(const chacha_iv *)nonce, 20);
-		// Set poly1305 key
-		chacha_update(&enc_state, block0, block0, sizeof(block0));
-		poly1305_init(&mac, (const poly1305_key *)block0);
+			::memset(block0, 0, sizeof(block0));
+			chacha_init(&enc_state, (const chacha_key *)key->data(),
+					(const chacha_iv *)nonce, 20);
+			// Set poly1305 key
+			chacha_update(&enc_state, block0, block0, sizeof(block0));
+			poly1305_init(&mac, (const poly1305_key *)block0);
 
-		if (aadlen > 0) {
-			// Add unencrypted data
-			poly1305_update(&mac, aad, aadlen);
-			// We don't care about endiannes here for speed
-			//_u64_le_from_ull(slen, aadlen);
-			poly1305_update(&mac, (byte *)&aadlen, sizeof(aadlen));
+			if (aadlen > 0) {
+				// Add unencrypted data
+				poly1305_update(&mac, aad, aadlen);
+				// We don't care about endiannes here for speed
+				//_u64_le_from_ull(slen, aadlen);
+				poly1305_update(&mac, (byte *)&aadlen, sizeof(aadlen));
+			}
+			// Encrypt
+			auto encrypted = chacha_update(&enc_state, in, out, inlen);
+			chacha_final(&enc_state, out + encrypted);
+			// Final tag
+			poly1305_update(&mac, out, inlen);
+			//_u64_le_from_ull(slen, inlen);
+			poly1305_update(&mac, (byte *)&inlen, sizeof(inlen));
+			poly1305_finish(&mac, tag->data);
+
+			return tag;
 		}
-		// Encrypt
-		auto encrypted = chacha_update(&enc_state, in, out, inlen);
-		chacha_final(&enc_state, out + encrypted);
-		// Final tag
-		poly1305_update(&mac, out, inlen);
-		//_u64_le_from_ull(slen, inlen);
-		poly1305_update(&mac, (byte *)&inlen, sizeof(inlen));
-		poly1305_finish(&mac, tag->data);
+		else {
+			/* Just generate encrypted data */
+			chacha_init(&enc_state, (const chacha_key *)key->data(),
+				(const chacha_iv *)nonce, 20);
+			auto encrypted = chacha_update(&enc_state, in, out, inlen);
+			chacha_final(&enc_state, out + encrypted);
 
-		return tag;
+			return nullptr;
+		}
 	}
 
 	int verify_16(const unsigned char *x,const unsigned char *y)
@@ -319,14 +337,14 @@ class HPencAead::impl
 public:
 	std::unique_ptr<AeadCipher> cipher;
 
-	impl(AeadAlgorithm alg)
+	impl(AeadAlgorithm alg, bool random_mode)
 	{
 		if (alg == AeadAlgorithm::AES_GCM_128
 				|| alg == AeadAlgorithm::AES_GCM_256) {
-			cipher.reset(new OpenSSLAeadCipher(alg));
+			cipher.reset(new OpenSSLAeadCipher(alg, random_mode));
 		}
 		else if (alg == AeadAlgorithm::CHACHA20_POLY_1305) {
-			cipher.reset(new Chacha20Poly1305AeadCipher(alg));
+			cipher.reset(new Chacha20Poly1305AeadCipher(alg, random_mode));
 		}
 	}
 
@@ -335,8 +353,8 @@ public:
 	}
 };
 
-HPencAead::HPencAead(AeadAlgorithm alg) :
-		pimpl(new impl(alg))
+HPencAead::HPencAead(AeadAlgorithm alg, bool random_mode) :
+		pimpl(new impl(alg, random_mode))
 {
 }
 

@@ -61,7 +61,8 @@ private:
 	class impl;
 	std::unique_ptr<impl> pimpl;
 public:
-	explicit HPencAead(AeadAlgorithm alg = AeadAlgorithm::AES_GCM_128);
+	explicit HPencAead(AeadAlgorithm alg = AeadAlgorithm::AES_GCM_128,
+			bool random_mode = false);
 	virtual ~HPencAead();
 
 	void setKey(std::shared_ptr<SessionKey> const &sk);

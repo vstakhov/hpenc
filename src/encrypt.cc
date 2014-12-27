@@ -95,7 +95,7 @@ public:
 		auto key = kdf->genKey(klen);
 
 		for (auto i = 0U; i < pool->size(); i ++) {
-			auto cipher = std::make_shared<HPencAead>(alg);
+			auto cipher = std::make_shared<HPencAead>(alg, _rmode);
 			cipher->setKey(key);
 			if (!nonce) {
 				nonce.reset(new HPEncNonce(cipher->noncelen()));
@@ -125,14 +125,18 @@ public:
 			auto tag = cipher->encrypt(reinterpret_cast<byte *>(&bs), sizeof(bs),
 					n.data(), n.size(), io_buf->data(), rd, io_buf->data());
 
-			if (!tag) {
-				return -1;
+			if (!random_mode) {
+				if (!tag) {
+					return -1;
+				}
+
+				auto mac_pos = io_buf->data() + rd;
+				std::copy(tag->data, tag->data + tag->datalen, mac_pos);
+				return rd + tag->datalen;
 			}
 
-			auto mac_pos = io_buf->data() + rd;
-			std::copy(tag->data, tag->data + tag->datalen, mac_pos);
+			return rd;
 
-			return (random_mode ? rd: rd + tag->datalen);
 		}
 		return -1;
 	}

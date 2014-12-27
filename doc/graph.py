@@ -20,6 +20,7 @@ if mode == 0:
     plt.title('Encryption throughtput from the block size')
     ax.set_xlabel('Block size')
     ax.set_xscale('symlog', basex=2)
+    plt.axvline(x=16384, ls='--', label='SSL record size')
     ax.xaxis.set_major_formatter(formatter)
 else:
     plt.title('Encryption throughtput from the CPU cores count')
