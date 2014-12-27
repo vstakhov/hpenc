@@ -14,33 +14,33 @@ if [ "F$NCPU" = "F" ] ; then
 	fi
 fi
 
-## Block size tests
-#echo "Block size encrypt test (all cores). bytes : mbits/second"
-#printf "Block\tAES-128\tAES-256\tChacha\n"
-#for _b in $BLOCK_SIZES ; do
-#	printf "$_b\t"
-#	_cnt=$(($DATA_SIZE / $_b))
-#	for _a in $ALGORITHMS ; do
-#		/usr/bin/time -p -o /tmp/_hpenc_bench $HPENC -b $_b -a $_a -c $_cnt < /dev/zero > /dev/null 2>&1 
-#		cat /tmp/_hpenc_bench | grep real | awk "${AWK_EXPR}"
-#		rm /tmp/_hpenc_bench
-#	done
-#	echo
-#done
-#
-## CPU count tests
-#echo "CPU cores encrypt test (16M block). core count : mbits/second"
-#printf "Cores\tAES-128\tAES-256\tChacha\n"
-#for _b in `seq $NCPU` ; do
-#	_cnt=$(($DATA_SIZE / 16777216))
-#	printf "$_b\t"
-#	for _a in $ALGORITHMS ; do
-#		/usr/bin/time -p -o /tmp/_hpenc_bench $HPENC -b 16M -n $_b -a $_a -c $_cnt < /dev/zero > /dev/null 2>&1
-#		cat /tmp/_hpenc_bench | grep real | awk "${AWK_EXPR}"
-#		rm /tmp/_hpenc_bench
-#	done
-#	echo
-#done
+# Block size tests
+echo "Block size encrypt test (all cores). bytes : mbits/second"
+printf "Block\tAES-128\tAES-256\tChacha\n"
+for _b in $BLOCK_SIZES ; do
+	printf "$_b\t"
+	_cnt=$(($DATA_SIZE / $_b))
+	for _a in $ALGORITHMS ; do
+		/usr/bin/time -p -o /tmp/_hpenc_bench $HPENC -b $_b -a $_a -c $_cnt < /dev/zero > /dev/null 2>&1 
+		cat /tmp/_hpenc_bench | grep real | awk "${AWK_EXPR}"
+		rm /tmp/_hpenc_bench
+	done
+	echo
+done
+
+# CPU count tests
+echo "CPU cores encrypt test (16M block). core count : mbits/second"
+printf "Cores\tAES-128\tAES-256\tChacha\n"
+for _b in `seq $NCPU` ; do
+	_cnt=$(($DATA_SIZE / 16777216))
+	printf "$_b\t"
+	for _a in $ALGORITHMS ; do
+		/usr/bin/time -p -o /tmp/_hpenc_bench $HPENC -b 16M -n $_b -a $_a -c $_cnt < /dev/zero > /dev/null 2>&1
+		cat /tmp/_hpenc_bench | grep real | awk "${AWK_EXPR}"
+		rm /tmp/_hpenc_bench
+	done
+	echo
+done
 
 # PRF generator
 echo "CPU cores PRF test (16M block). core count : mbits/second"
