@@ -1,13 +1,13 @@
 COPTFLAGS?=	-O2
-CFLAGS?=	-Wall -g -std=c99 $(COPTFLAGS)
-CXXFLAGS?=	-Wall -std=c++11 -I../chacha-opt/app/include \
+CFLAGS+=	-Wall -g -std=c99 $(COPTFLAGS)
+CXXFLAGS+=	-Wall -std=c++11 -I../chacha-opt/app/include \
 		-I../poly1305-opt/app/include -g $(COPTFLAGS)
 CC?=	cc
 CXX?=	c++
 AR?=	ar
 ARFLAGS?=	rcs
-LIBS?=	-lcrypto
-LDFLAGS?=	-L../poly1305-opt/bin/ -L../chacha-opt/bin/ -pthread
+LIBS+=	-lcrypto
+LDFLAGS+=	-L../poly1305-opt/bin/ -L../chacha-opt/bin/ -pthread
 INSTALL?=	/usr/bin/install
 PREFIX?=	/usr/local
 
@@ -35,25 +35,25 @@ hpenc: $(OBJS)
 		-o hpenc $(LIBS)
 
 aead.o: aead.cc $(DEPS)
-	$(CXX) $(CXXFLAGS) -c aead.cc -o aead.o
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c aead.cc -o aead.o
 
 util.o: util.cc $(DEPS)
-	$(CXX) $(CXXFLAGS) -c util.cc -o util.o
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c util.cc -o util.o
 
 main.o: main.cc $(DEPS)
-	$(CXX) $(CXXFLAGS) -c main.cc -o main.o
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c main.cc -o main.o
 
 nonce.o: nonce.cc $(DEPS)
-	$(CXX) $(CXXFLAGS) -c nonce.cc -o nonce.o
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c nonce.cc -o nonce.o
 
 kdf.o: kdf.cc $(DEPS)
-	$(CXX) $(CXXFLAGS) -c kdf.cc -o kdf.o
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c kdf.cc -o kdf.o
 
 encrypt.o: encrypt.cc $(DEPS)
-	$(CXX) $(CXXFLAGS) -c encrypt.cc -o encrypt.o
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c encrypt.cc -o encrypt.o
 
 decrypt.o: decrypt.cc $(DEPS)
-	$(CXX) $(CXXFLAGS) -c decrypt.cc -o decrypt.o
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c decrypt.cc -o decrypt.o
 
 clean:
 	rm $(OBJS) hpenc || true
