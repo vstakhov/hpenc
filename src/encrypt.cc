@@ -220,13 +220,31 @@ void HPEncEncrypt::encrypt(bool encode, unsigned count)
 							if (util::atomicWrite(pimpl->fd_out,
 									reinterpret_cast<const byte *>(b64_out.data()),
 									b64_out.size()) == 0) {
-								throw std::runtime_error("Cannot write encrypted block");
+								if (pimpl->random_mode) {
+									// Assume that we are done
+									std::cerr << "Cannot write output: " <<
+											strerror(errno);
+									return;
+								}
+								else {
+									throw std::runtime_error("Cannot write "
+											"encrypted block");
+								}
 							}
 						}
 						else {
 							if (util::atomicWrite(pimpl->fd_out, io_buf->data(),
 									rd) == 0) {
-								throw std::runtime_error("Cannot write encrypted block");
+								if (pimpl->random_mode) {
+									// Assume that we are done
+									std::cerr << "Cannot write output: " <<
+											strerror(errno);
+									return;
+								}
+								else {
+									throw std::runtime_error("Cannot write "
+											"encrypted block");
+								}
 							}
 						}
 					}
