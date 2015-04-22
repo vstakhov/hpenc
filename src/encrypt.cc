@@ -237,8 +237,10 @@ void HPEncEncrypt::encrypt(bool encode, unsigned count)
 									rd) == 0) {
 								if (pimpl->random_mode) {
 									// Assume that we are done
-									std::cerr << "Cannot write output: " <<
-											strerror(errno);
+									if (errno != ENOSPC && errno != EPIPE) {
+										std::cerr << "Cannot write output: " <<
+											strerror(errno) << std::endl;
+									}
 									return;
 								}
 								else {
