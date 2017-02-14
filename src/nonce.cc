@@ -47,16 +47,7 @@ public:
 
 	void inc()
 	{
-		for (auto &c: nonce) {
-			if (c != 0xff) {
-				c ++;
-				break;
-			}
-			else {
-				// Go to the next digit
-				c = 0;
-			}
-		}
+		sodium_increment(nonce.data(), nonce.size());
 	}
 };
 
