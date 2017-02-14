@@ -23,8 +23,7 @@
 
 #include <openssl/evp.h>
 
-#include <chacha.h>
-#include <poly1305.h>
+#include <sodium.h>
 #include <cstring>
 #include "aead.h"
 #include "util.h"
@@ -179,29 +178,8 @@ public:
 class Chacha20Poly1305AeadCipher: public AeadCipher
 {
 private:
-	alignas(64) chacha_state enc_state;
-	alignas(64) poly1305_state mac;
 	bool random_mode;
 
-	static inline void _u64_le_from_ull(unsigned char out[8U],
-			unsigned long long x)
-	{
-		out[0] = (unsigned char) (x & 0xff);
-		x >>= 8;
-		out[1] = (unsigned char) (x & 0xff);
-		x >>= 8;
-		out[2] = (unsigned char) (x & 0xff);
-		x >>= 8;
-		out[3] = (unsigned char) (x & 0xff);
-		x >>= 8;
-		out[4] = (unsigned char) (x & 0xff);
-		x >>= 8;
-		out[5] = (unsigned char) (x & 0xff);
-		x >>= 8;
-		out[6] = (unsigned char) (x & 0xff);
-		x >>= 8;
-		out[7] = (unsigned char) (x & 0xff);
-	}
 public:
 	Chacha20Poly1305AeadCipher(AeadAlgorithm _alg, bool _rm) :
 			AeadCipher(), random_mode(_rm)
@@ -214,121 +192,45 @@ public:
 	{
 
 		if (!random_mode) {
-			alignas(64) byte block0[64];
 			auto tag = util::make_unique < MacTag >(taglen());
-			//byte slen[8];
-
-			::memset(block0, 0, sizeof(block0));
-			chacha_init(&enc_state, (const chacha_key *)key->data(),
-					(const chacha_iv *)nonce, 20);
-			// Set poly1305 key
-			chacha_update(&enc_state, block0, block0, sizeof(block0));
-			poly1305_init(&mac, (const poly1305_key *)block0);
-
-			if (aadlen > 0) {
-				// Add unencrypted data
-				poly1305_update(&mac, aad, aadlen);
-				// We don't care about endiannes here for speed
-				//_u64_le_from_ull(slen, aadlen);
-				poly1305_update(&mac, (byte *)&aadlen, sizeof(aadlen));
-			}
-			// Encrypt
-			auto encrypted = chacha_update(&enc_state, in, out, inlen);
-			chacha_final(&enc_state, out + encrypted);
-			// Final tag
-			poly1305_update(&mac, out, inlen);
-			//_u64_le_from_ull(slen, inlen);
-			poly1305_update(&mac, (byte *)&inlen, sizeof(inlen));
-			poly1305_finish(&mac, tag->data);
+			crypto_aead_chacha20poly1305_encrypt_detached(out, tag->data,
+					NULL, in, inlen, aad, aadlen,
+					NULL, nonce, key->data());
 
 			return tag;
 		}
 		else {
 			/* Just generate encrypted data */
-			chacha_init(&enc_state, (const chacha_key *)key->data(),
-				(const chacha_iv *)nonce, 20);
-			auto encrypted = chacha_update(&enc_state, in, out, inlen);
-			chacha_final(&enc_state, out + encrypted);
+			crypto_stream_chacha20(out, inlen, nonce, key->data());
 
 			return nullptr;
 		}
-	}
-
-	int verify_16(const unsigned char *x,const unsigned char *y)
-	{
-	  unsigned int differentbits = 0;
-	#define F(i) differentbits |= x[i] ^ y[i];
-	  F(0)
-	  F(1)
-	  F(2)
-	  F(3)
-	  F(4)
-	  F(5)
-	  F(6)
-	  F(7)
-	  F(8)
-	  F(9)
-	  F(10)
-	  F(11)
-	  F(12)
-	  F(13)
-	  F(14)
-	  F(15)
-	  return (1 & ((differentbits - 1) >> 8)) - 1;
 	}
 
 	virtual bool decrypt(const byte *aad, size_t aadlen, const byte *nonce,
 			size_t nlen, const byte *in, size_t inlen, byte *out,
 			const MacTag *tag) override
 	{
-		alignas(64) byte block0[64];
-		//byte slen[8];
-		auto test_tag = util::make_unique < MacTag >(taglen());
-
-		::memset(block0, 0, sizeof(block0));
-		chacha_init(&enc_state, (const chacha_key *)key->data(),
-				(const chacha_iv *)nonce, 20);
-		// Set poly1305 key
-		chacha_update(&enc_state, block0, block0, sizeof(block0));
-		poly1305_init(&mac, (const poly1305_key *)block0);
-
-		if (aadlen > 0) {
-			// Add unencrypted data
-			poly1305_update(&mac, aad, aadlen);
-			// We don't care about endiannes here for speed
-			//_u64_le_from_ull(slen, aadlen);
-			poly1305_update(&mac, (byte *)&aadlen, sizeof(aadlen));
-		}
-		// Final tag
-		poly1305_update(&mac, out, inlen);
-		//_u64_le_from_ull(slen, inlen);
-		poly1305_update(&mac, (byte *)&inlen, sizeof(inlen));
-		poly1305_finish(&mac, test_tag->data);
-
-		auto ret = verify_16(test_tag->data, tag->data);
-		if (ret != 0) {
-			memset(out, 0, inlen);
+		if (crypto_aead_chacha20poly1305_encrypt_detached(out, tag->data, NULL,
+				in, inlen, aad, aadlen, NULL, nonce, key->data()) != 0) {
 			return false;
 		}
-
-		auto decrypted = chacha_update(&enc_state, in, out, inlen);
-		chacha_final(&enc_state, out + decrypted);
 
 		return true;
 	}
 
 	virtual size_t taglen() const override
 	{
-		return 16;
+		return crypto_aead_chacha20poly1305_abytes();
 	}
 	virtual size_t keylen() const override
 	{
-		return sizeof(chacha_key);
+		return crypto_aead_chacha20poly1305_keybytes();
 	}
 
 	virtual size_t noncelen() const override
 	{
-		return sizeof(chacha_iv);
+		return crypto_aead_chacha20poly1305_npubbytes();
 	}
 };
 

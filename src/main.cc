@@ -28,17 +28,16 @@
 #include "decrypt.h"
 #include "kdf.h"
 #include "nonce.h"
-#include <chacha.h>
-#include <poly1305.h>
 #include <unistd.h>
 #include <iostream>
 #include <cstdlib>
+#include <sodium.h>
 
 using namespace hpenc;
 
 static void usage(char **argv)
 {
-	std::cerr 	<< "Usage: " << argv[0] << " [-h] [-d] [-a algorithm] [-k key|-p] "
+	std::cerr 	<< "Usage: " << argv[0] << " [-h] [-d] [-a algorithm] [-k key|-p] [-l]"
 				<< "[-b block_size] [-B] [-r] [-c count] [psk]"
 				<< std::endl
 				<< "Available options: " << std::endl
@@ -47,6 +46,7 @@ static void usage(char **argv)
 				<< "                       aes-128 or aes-256" << std::endl
 				<< "  -k <key>             52 bytes hex encoded pre-shared key" << std::endl
 				<< "  -p                   Read password from the terminal instead of key" << std::endl
+				<< "  -l                   Use legacy pbkdf method" << std::endl
 				<< "  -b <block_size>      Block size to use (default: 4K)" << std::endl
 				<< "  -B                   Base64 output/input" << std::endl
 				<< "  -r                   Act as pseudo-random generator" << std:: endl
@@ -78,10 +78,11 @@ int main(int argc, char **argv)
 	bool decrypt = false;
 	bool random_mode = false;
 	bool password = false;
+	bool legacy_pbkdf = false;
 	unsigned count = 0;
 	unsigned nthreads = 0;
 
-	while ((opt = ::getopt(argc, argv, "ha:b:pk:Bdn:rc:")) != -1) {
+	while ((opt = ::getopt(argc, argv, "ha:b:plk:Bdn:rc:")) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv);
@@ -170,14 +171,19 @@ int main(int argc, char **argv)
 			std::swap(psk, passwd);
 			break;
 		}
+		case 'l':
+			legacy_pbkdf = true;
+			break;
 		}
 	}
 
 	argv += optind;
 	argc -= optind;
 
-	chacha_startup();
-	poly1305_startup();
+	if (sodium_init() != 0) {
+		throw std::runtime_error("Cannot init libsodium");
+		exit(EXIT_FAILURE);
+	}
 
 	if (!psk) {
 		if (decrypt) {
@@ -201,7 +207,8 @@ int main(int argc, char **argv)
 		}
 	}
 
-	auto kdf = util::make_unique<HPEncKDF>(std::move(psk), nullptr, password);
+	auto kdf = util::make_unique<HPEncKDF>(std::move(psk), nullptr, password,
+			legacy_pbkdf);
 
 	if (decrypt) {
 		auto decrypter = util::make_unique<HPEncDecrypt>(std::move(kdf),

@@ -23,10 +23,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
+#include <sodium.h>
 #include "nonce.h"
 #include "aead.h"
 
@@ -88,17 +85,7 @@ const std::vector<unsigned char>& HPEncNonce::get()
 
 bool HPEncNonce::randomize()
 {
-	auto rnd = ::open(rndfile, O_RDONLY);
-
-	if (rnd == -1) {
-		return false;
-	}
-	if (::read(rnd, pimpl->nonce.data(), pimpl->nonce.size()) == -1) {
-		::close(rnd);
-		return false;
-	}
-
-	::close(rnd);
+	randombytes_buf(pimpl->nonce.data(), pimpl->nonce.size());
 
 	return true;
 }

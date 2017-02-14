@@ -15,7 +15,7 @@ For `hpenc` you can use **all** your CPU cores and burn your network as fast as 
 digest, but much much faster. On the other hand, `hpenc` utilizes the modern cryptographic ciphers and tries
 to use hardware acceleration if possible.
 
-I understand that external dependencies might be evil for servers transferring, hence, `hpenc` depends only on openssl library and `C++11` compiler which is likely available in all operating system.
+I understand that external dependencies might be evil for servers transferring, hence, `hpenc` depends only on `openssl` and `sodium` libraries and `C++11` compiler which is likely available in all operating system.
 
 - You want to store like 5Tb of movies on some backup space available via `ftp`. You do not want anybody but you to watch those movies. `hpenc` allows you to encrypt and authenticate your backup quickly. Of course, you need some extra
 space for storing authentication data but it is negligible in terms of the overall size (about 16K for each gigabyte of data). In this case you still do not need to create som complex atchitecture of keys: just generate a key and store it in some secure place.

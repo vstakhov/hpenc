@@ -1,13 +1,12 @@
 COPTFLAGS?=	-O2
 CFLAGS+=	-Wall -g -std=c99 $(COPTFLAGS)
-CXXFLAGS+=	-Wall -std=c++11 -I../chacha-opt/app/include \
-		-I../poly1305-opt/app/include -g $(COPTFLAGS)
+CXXFLAGS+= -Wall -std=c++11 -g $(COPTFLAGS)
 CC?=	cc
 CXX?=	c++
 AR?=	ar
 ARFLAGS?=	rcs
-LIBS+=	-lcrypto
-LDFLAGS+=	-L../poly1305-opt/bin/ -L../chacha-opt/bin/ -pthread
+LIBS+=	-lcrypto -lsodium
+LDFLAGS+= -pthread
 INSTALL?=	/usr/bin/install
 PREFIX?=	/usr/local
 
@@ -31,7 +30,6 @@ all: hpenc
 
 hpenc: $(OBJS)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(OBJS) \
-		../chacha-opt/bin/chacha.lib ../poly1305-opt/bin/poly1305.lib \
 		-o hpenc $(LIBS)
 
 aead.o: aead.cc $(DEPS)

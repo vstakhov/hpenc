@@ -42,7 +42,8 @@ private:
 	std::unique_ptr<impl> pimpl;
 public:
 	explicit HPEncKDF(std::unique_ptr<SessionKey> &&psk,
-			std::unique_ptr<HPEncNonce> &&nonce, bool password = false);
+			std::unique_ptr<HPEncNonce> &&nonce, bool password = false,
+			bool legacy_pbkdf = false);
 	virtual ~HPEncKDF();
 
 	void setNonce(const std::vector<byte> &nonce);

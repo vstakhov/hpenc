@@ -1,6 +1,0 @@
-[submodule "chacha-opt"]
-	path = chacha-opt
-	url = https://github.com/floodyberry/chacha-opt
-[submodule "poly1305-opt"]
-	path = poly1305-opt
-	url = https://github.com/floodyberry/poly1305-opt

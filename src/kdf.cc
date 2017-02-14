@@ -25,7 +25,7 @@
 #include "kdf.h"
 #include "nonce.h"
 #include "util.h"
-#include <chacha.h>
+#include <sodium.h>
 #include <openssl/evp.h>
 
 namespace hpenc
@@ -39,10 +39,13 @@ public:
 	std::unique_ptr<SessionKey> psk;
 	std::vector<byte> initial_nonce;
 	bool password;
+	bool legacy_pbkdf;
 
 	impl(std::unique_ptr<SessionKey> &&_psk,
 			std::unique_ptr<HPEncNonce> &&_nonce,
-			bool _password) : psk(std::move(_psk)), password(_password)
+			bool _password,
+			bool _legacy_pbkdf) : psk(std::move(_psk)), password(_password),
+					legacy_pbkdf(_legacy_pbkdf)
 	{
 		if (!_nonce) {
 			// Create random nonce
@@ -61,11 +64,16 @@ public:
 		// Save the initial nonce
 		initial_nonce = nonce->get();
 	}
+
+	~impl()
+	{
+		sodium_memzero(psk->data(), psk->size());
+	}
 };
 
 HPEncKDF::HPEncKDF(std::unique_ptr<SessionKey> &&psk,
-		std::unique_ptr<HPEncNonce> &&nonce, bool password) :
-	pimpl(new impl(std::move(psk), std::move(nonce), password))
+		std::unique_ptr<HPEncNonce> &&nonce, bool password, bool legacy_pbkdf) :
+	pimpl(new impl(std::move(psk), std::move(nonce), password, legacy_pbkdf))
 {
 }
 
@@ -86,18 +94,28 @@ std::shared_ptr<SessionKey> HPEncKDF::genKey(unsigned keylen)
 		pimpl->psk = util::make_unique<SessionKey>();
 		pimpl->psk->resize(nonce_bytes);
 		// Now derive using openssl
-		PKCS5_PBKDF2_HMAC((const char*)passwd->data(), passwd->size(),
-				nonce.data(), nonce.size(), pbkdf_iters, EVP_sha512(),
-				 pimpl->psk->size(), pimpl->psk->data());
-		// Cleanup password
-		for (volatile auto &c: (*passwd)) {
-			c = '\0';
+
+		if (pimpl->legacy_pbkdf) {
+			PKCS5_PBKDF2_HMAC((const char*)passwd->data(), passwd->size(),
+					nonce.data(), nonce.size(), pbkdf_iters, EVP_sha512(),
+					pimpl->psk->size(), pimpl->psk->data());
 		}
+		else {
+			if (crypto_pwhash(pimpl->psk->data(), pimpl->psk->size(),
+					(const char *)passwd->data(), passwd->size(),
+					nonce.data(), crypto_pwhash_OPSLIMIT_SENSITIVE,
+					crypto_pwhash_MEMLIMIT_SENSITIVE,
+					crypto_pwhash_ALG_DEFAULT) != 0) {
+				throw std::runtime_error("Cannot derive key from password");
+			}
+		}
+		// Cleanup password
+		sodium_memzero (passwd->data(), passwd->size());
 		pimpl->password = false;
 	}
-	xchacha((const chacha_key *)pimpl->psk->data(),
-			(const chacha_iv24 *)nonce.data(),
-			sk->data(), sk->data(), sk->size(), 20);
+
+	crypto_stream(sk->data(), sk->size(), nonce.data(),
+			pimpl->psk->data());
 
 	return sk;
 }
