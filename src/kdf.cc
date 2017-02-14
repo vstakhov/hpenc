@@ -81,6 +81,17 @@ HPEncKDF::~HPEncKDF()
 {
 }
 
+static int
+xchacha20(unsigned char *c, unsigned long long clen,
+		const unsigned char *n, const unsigned char *k)
+{
+	unsigned char k2[crypto_core_hchacha20_OUTPUTBYTES];
+	crypto_core_hchacha20(k2, n, k, NULL);
+	return crypto_stream_chacha20(c, clen, n + crypto_core_hchacha20_INPUTBYTES,
+			k2);
+}
+
+
 std::shared_ptr<SessionKey> HPEncKDF::genKey(unsigned keylen)
 {
 	auto nonce = pimpl->nonce->incAndGet();
@@ -114,7 +125,7 @@ std::shared_ptr<SessionKey> HPEncKDF::genKey(unsigned keylen)
 		pimpl->password = false;
 	}
 
-	crypto_stream(sk->data(), sk->size(), nonce.data(),
+	xchacha20(sk->data(), sk->size(), nonce.data(),
 			pimpl->psk->data());
 
 	return sk;
