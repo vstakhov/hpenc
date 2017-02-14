@@ -111,7 +111,8 @@ int main(int argc, char **argv)
 		case 'k':
 		{
 			if (psk) {
-				throw std::runtime_error("Key/password has been already specified");
+				std::cerr << "Key/password has been already specified"
+					<< std::endl;
 				exit(EXIT_FAILURE);
 			}
 			std::string key_base32(optarg);
@@ -156,17 +157,20 @@ int main(int argc, char **argv)
 		{
 			password = true;
 			if (psk) {
-				throw std::runtime_error("Key/password has been already specified");
+				std::cerr << "Key/password has been already specified" <<
+						std::endl;
 				exit(EXIT_FAILURE);
 			}
 			auto passwd = util::readPassphrase();
 			if (!passwd || passwd->size() == 0) {
-				throw std::runtime_error("Password is invalid");
+				std::cerr << "Password is invalid" << std::endl;
+				exit(EXIT_FAILURE);
 			}
 			if (passwd->size() < 6) {
 				// XXX: validate it more precisely
-				throw std::runtime_error("Password is too short "
-						"(6 characters at least are required)");
+				std::cerr << "Password is too short " <<
+						"(6 characters at least are required)" << std::endl;
+				exit(EXIT_FAILURE);
 			}
 			std::swap(psk, passwd);
 			break;
@@ -181,19 +185,19 @@ int main(int argc, char **argv)
 	argc -= optind;
 
 	if (sodium_init() != 0) {
-		throw std::runtime_error("Cannot init libsodium");
+		std::cerr << "Cannot init libsodium" << std::endl;
 		exit(EXIT_FAILURE);
 	}
 
 	if (!psk) {
 		if (decrypt) {
-			throw std::invalid_argument("Cannot decrypt without key");
+			std::cerr << "Cannot decrypt without key" << std::endl;
 			exit(EXIT_FAILURE);
 		}
 		psk = util::genPSK(alg);
 
 		if (!psk) {
-			throw std::runtime_error("Cannot open /dev/urandom");
+			std::cerr << "Cannot open /dev/urandom" << std::endl;
 			exit(EXIT_FAILURE);
 		}
 
@@ -207,19 +211,25 @@ int main(int argc, char **argv)
 		}
 	}
 
-	auto kdf = util::make_unique<HPEncKDF>(std::move(psk), nullptr, password,
-			legacy_pbkdf);
+	try {
+		auto kdf = util::make_unique<HPEncKDF>(std::move(psk), nullptr, password,
+				legacy_pbkdf);
 
-	if (decrypt) {
-		auto decrypter = util::make_unique<HPEncDecrypt>(std::move(kdf),
-				std::string(""), std::string(""));
-		decrypter->decrypt(encode, count);
+		if (decrypt) {
+			auto decrypter = util::make_unique<HPEncDecrypt>(std::move(kdf),
+					std::string(""), std::string(""));
+			decrypter->decrypt(encode, count);
+		}
+		else {
+			auto encrypter = util::make_unique<HPEncEncrypt>(std::move(kdf),
+				std::string(""), std::string(""),
+				alg, block_size, nthreads, random_mode);
+			encrypter->encrypt(encode, count);
+		}
 	}
-	else {
-		auto encrypter = util::make_unique<HPEncEncrypt>(std::move(kdf),
-			std::string(""), std::string(""),
-			alg, block_size, nthreads, random_mode);
-		encrypter->encrypt(encode, count);
+	catch (std::exception &e) {
+		std::cerr << "Failure: " << e.what() << std::endl;
+		exit(EXIT_FAILURE);
 	}
 
 	return 0;
