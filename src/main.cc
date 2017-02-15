@@ -43,7 +43,7 @@ static void usage(char **argv)
 				<< "Available options: " << std::endl
 				<< "  -d                   Decrypt data" << std::endl
 				<< "  -a <algorithm>       Use specified algorithm: chacha20," << std::endl
-				<< "                       aes-128 or aes-256" << std::endl
+				<< "                       aes-128 or aes-256 or tiaoxin" << std::endl
 				<< "  -k <key>             52 bytes hex encoded pre-shared key" << std::endl
 				<< "  -p                   Read password from the terminal instead of key" << std::endl
 				<< "  -l                   Use legacy pbkdf method" << std::endl
@@ -59,6 +59,9 @@ parseAlg(const std::string &arg)
 {
 	if (arg.find("chacha") != std::string::npos) {
 		return AeadAlgorithm::CHACHA20_POLY_1305;
+	}
+	else if (arg.find("tiaoxin") != std::string::npos) {
+		return AeadAlgorithm::TIAOXIN_346;
 	}
 	else if (arg.find("256") != std::string::npos) {
 		return AeadAlgorithm::AES_GCM_256;

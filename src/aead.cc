@@ -25,6 +25,7 @@
 
 #include <sodium.h>
 #include <cstring>
+#include <array>
 #include "aead.h"
 #include "util.h"
 
@@ -36,8 +37,9 @@ class AeadCipher
 {
 protected:
 	std::shared_ptr<SessionKey> key;
+	bool random_mode;
 public:
-	AeadCipher() {}
+	AeadCipher(bool _random_mode = false) : random_mode(_random_mode) {}
 	virtual ~AeadCipher() {}
 
 	virtual bool hasKey() const { return !!key; }
@@ -70,10 +72,9 @@ private:
 	std::unique_ptr<EVP_CIPHER_CTX> ctx_dec;
 	const EVP_CIPHER *alg;
 	AeadAlgorithm alg_num;
-	bool random_mode;
 public:
 	OpenSSLAeadCipher(AeadAlgorithm _alg, bool _rm)
-		: AeadCipher(), random_mode(_rm)
+		: AeadCipher(_rm)
 	{
 		ctx_enc.reset(EVP_CIPHER_CTX_new());
 		ctx_dec.reset(EVP_CIPHER_CTX_new());
@@ -177,12 +178,9 @@ public:
 
 class Chacha20Poly1305AeadCipher: public AeadCipher
 {
-private:
-	bool random_mode;
-
 public:
 	Chacha20Poly1305AeadCipher(AeadAlgorithm _alg, bool _rm) :
-			AeadCipher(), random_mode(_rm)
+			AeadCipher(_rm)
 	{
 	}
 
@@ -234,6 +232,346 @@ public:
 	}
 };
 
+#if defined(_MSC_VER) && _MSC_VER >= 1600 || defined(__GNUC__)
+#define HW_TIAOXIN 1
+
+#pragma GCC push_options
+#pragma GCC target("ssse3,aes")
+
+#include <tmmintrin.h>
+#include <wmmintrin.h>
+
+
+class Tiaoxin346AeadCipherOpt: public AeadCipher
+{
+private:
+	__m128i T3[3], T4[4], T6[6];
+	__m128i K;
+	__m128i N;
+	__m128i Z0;
+	__m128i Z1;
+	__m128i SH;
+
+	void init(const byte *nonce, size_t nlen)
+	{
+		K = _mm_load_si128((const __m128i *)key->data());
+		N = _mm_load_si128((const __m128i *)nonce);
+
+		T3[0] = K; T3[1] = K; T3[2] = N;
+		T4[0] = K; T4[1] = K; T4[2] = N; T4[3] = Z0;
+		T6[0] = K; T6[1] = K; T6[2] = N; T6[3] = Z1;
+		T6[4] = T6[5] = _mm_xor_si128(Z0, Z0);
+
+		for (auto i = 0; i < 15; i ++) {
+			update(Z0, Z1, Z0);
+		}
+	}
+
+	inline void r1(__m128i M)
+	{
+		auto tmp = T3[0];
+
+		T3[0] = _mm_aesenc_si128(T3[2], M);
+		T3[2] = T3[1];
+		T3[1] = _mm_aesenc_si128(tmp, Z0);
+		T3[0] = _mm_xor_si128(T3[0], tmp);
+	}
+
+	inline void r2(__m128i M)
+	{
+		auto tmp = T4[0];
+
+		T4[0] = _mm_aesenc_si128(T4[2], M);
+		T4[3] = T4[2];
+		T4[2] = T4[1];
+		T4[1] = _mm_aesenc_si128(tmp, Z0);
+		T4[0] = _mm_xor_si128(T4[0], tmp);
+	}
+
+	inline void r3(__m128i M)
+	{
+		auto tmp = T6[0];
+
+		T6[0] = _mm_aesenc_si128(T6[2], M);
+		T6[5] = T6[4];
+		T6[4] = T6[3];
+		T6[3] = T6[2];
+		T6[2] = T6[1];
+		T6[1] = _mm_aesenc_si128(tmp, Z0);
+		T6[0] = _mm_xor_si128(T6[0], tmp);
+	}
+
+	inline void update(__m128i M0, __m128i M1, __m128i M2)
+	{
+		r1(M0);
+		r2(M1);
+		r3(M2);
+	}
+
+	inline void store1(byte *c, off_t offset)
+	{
+		auto O = _mm_xor_si128(T4[1], _mm_xor_si128(T3[0],
+				_mm_xor_si128(T3[2], _mm_and_si128(T6[3], T4[3]))
+		));
+		_mm_storeu_si128((__m128i *)(c + offset), O);
+	}
+
+
+	inline void store2(byte *c, off_t offset)
+	{
+		auto O = _mm_xor_si128(T3[1], _mm_xor_si128(T6[0],
+				_mm_xor_si128(T4[2], _mm_and_si128(T6[5], T3[2]))
+		));
+		_mm_storeu_si128((__m128i *)(c + offset), O);
+	}
+
+	inline void decrypt_round(__m128i C0, __m128i C1, byte *b1, byte *b2)
+	{
+		C0 = _mm_xor_si128(T3[1], _mm_xor_si128(_mm_and_si128(T6[2],T4[2]), C0));
+		C1 = _mm_xor_si128(T4[1], _mm_xor_si128(_mm_and_si128(T6[4],T3[1]), C1));
+		/* Modified update */
+		auto tmpM1 = _mm_aesenc_si128(T6[5], T6[0]);
+		auto tmpM0 = _mm_aesenc_si128(T3[2], T3[0]);
+		auto tmp = T4[1];
+
+		T4[1] = _mm_aesenc_si128(T4[0], Z0);
+		T4[0] = _mm_aesenc_si128(T4[3], T4[0]);
+		T4[3] = T4[2];
+		T4[2] = tmp;
+		T3[2] = T3[1];
+		T3[1] = _mm_aesenc_si128(T3[0], Z0);
+		T6[5] = T6[4]; T6[4] = T6[3]; T6[3] = T6[2]; T6[2] = T6[1];
+		T6[1] = _mm_aesenc_si128(T6[0], Z0);
+		T3[0] = _mm_xor_si128(T4[1], C0);
+		T6[0] = _mm_xor_si128(T3[1], C1);
+		tmpM0 = _mm_xor_si128(tmpM0, T3[0]);
+		tmpM1 = _mm_xor_si128(tmpM0, _mm_xor_si128(T6[0], tmpM1));
+		T4[0] = _mm_xor_si128(T4[0],tmpM1);
+
+		_mm_storeu_si128((__m128i *)b1, tmpM0);
+		_mm_storeu_si128((__m128i *)b2, tmpM1);
+	}
+
+
+	void finish(uint64_t aadlen, uint64_t inlen,
+			std::unique_ptr<MacTag> &tag)
+	{
+		__m128i W0, W1, Wt, T;
+
+		W0 = _mm_set_epi64x(0, aadlen);
+		W1 = _mm_set_epi64x(0, inlen);
+		W0 = _mm_shuffle_epi8(W0, SH);
+		W1 = _mm_shuffle_epi8(W1, SH);
+		Wt = _mm_xor_si128(W0, W1);
+		update(W0, W1, Wt);
+
+		for (auto i = 0; i < 20; i ++) {
+			update(Z0, Z1, Z0);
+		}
+
+		T = _mm_xor_si128(T3[0], _mm_xor_si128(T3[1],
+				_mm_xor_si128(T3[2], _mm_xor_si128(T4[0],
+					_mm_xor_si128(T4[1], _mm_xor_si128(T4[2],
+						_mm_xor_si128(T4[3],
+							_mm_xor_si128(T6[0],
+								_mm_xor_si128(T6[1],
+									_mm_xor_si128(T6[2],
+										_mm_xor_si128(T6[3],
+											_mm_xor_si128(T6[4], T6[5]))))))))))));
+		_mm_storeu_si128((__m128i *)tag->data, T);
+	}
+
+public:
+	Tiaoxin346AeadCipherOpt(AeadAlgorithm _alg, bool _rm) :
+			AeadCipher(_rm)
+	{
+		Z0 = _mm_set_epi8(0x42,0x8a,0x2f,0x98,0xd7,0x28,0xae,0x22,0x71,0x37,
+				0x44,0x91,0x23,0xef,0x65,0xcd);
+		Z1 = _mm_set_epi8(0xb5,0xc0,0xfb,0xcf,0xec,0x4d,0x3b,0x2f,0xe9,0xb5,
+				0xdb,0xa5,0x81,0x89,0xdb,0xbc);
+		K = _mm_xor_si128(Z0, Z0);
+		N = _mm_xor_si128(Z0, Z0);
+		/* Convert length to __m128i */
+		SH = _mm_set_epi8(7,6,5,4,3,2,1,0,15,14,13,12,11,10,9,8);
+	}
+
+	virtual std::unique_ptr<MacTag> encrypt(const byte *aad, size_t aadlen,
+			const byte *nonce, size_t nlen, const byte *in, size_t inlen,
+			byte *out) override
+	{
+
+		__m128i M0, M1, M2, M3, tmp;
+		alignas(32) std::array<byte, 32> padded;
+
+		if (!random_mode) {
+			auto tag = util::make_unique < MacTag >(taglen());
+			decltype(aadlen) i;
+			init(nonce, nlen);
+
+			for (i = 0; i + 64 <= aadlen; i += 64) {
+				M0 = _mm_load_si128 ((const __m128i *)(aad + i));
+				M1 = _mm_load_si128 ((const __m128i *)(aad + i + 16));
+				tmp = _mm_xor_si128 (M0, M1);
+				update(M0, M1, tmp);
+				M2 = _mm_load_si128 ((const __m128i *)(aad + i + 32));
+				M3 = _mm_load_si128 ((const __m128i *)(aad + i + 48));
+				tmp = _mm_xor_si128 (M2, M3);
+				update(M2, M3, tmp);
+			}
+			for (; i + 32 <= aadlen; i += 32) {
+				M0 = _mm_load_si128 ((const __m128i *)(aad + i));
+				M1 = _mm_load_si128 ((const __m128i *)(aad + i + 16));
+				tmp = _mm_xor_si128 (M0, M1);
+				update(M0, M1, tmp);
+			}
+
+			if (aadlen > i) {
+				padded.fill(0);
+				::memcpy(padded.data(), aad + i, aadlen - i);
+				M0 = _mm_load_si128 ((const __m128i *)(padded.data()));
+				M1 = _mm_load_si128 ((const __m128i *)(padded.data() + 16));
+				tmp = _mm_xor_si128 (M0, M1);
+				update(M0, M1, tmp);
+			}
+
+			/* Encryption stage */
+			for (i = 0; i + 64 <= inlen; i += 64) {
+				M0 = _mm_load_si128 ((const __m128i *)(in + i));
+				M1 = _mm_load_si128 ((const __m128i *)(in + i + 16));
+				tmp = _mm_xor_si128 (M0, M1);
+				update(M0, M1, tmp);
+				store1(out, i);
+				store2(out, i + 16);
+				M2 = _mm_load_si128 ((const __m128i *)(in + i + 32));
+				M3 = _mm_load_si128 ((const __m128i *)(in + i + 48));
+				tmp = _mm_xor_si128 (M2, M3);
+				update(M2, M3, tmp);
+				store1(out, i + 32);
+				store2(out, i + 48);
+			}
+			for (; i + 32 <= inlen; i += 32) {
+				M0 = _mm_load_si128 ((const __m128i *)(in + i));
+				M1 = _mm_load_si128 ((const __m128i *)(in + i + 16));
+				tmp = _mm_xor_si128 (M0, M1);
+				update(M0, M1, tmp);
+				store1(out, i);
+				store2(out, i + 16);
+			}
+
+			if (inlen > i) {
+				padded.fill(0);
+				::memcpy(padded.data(), in + i, inlen - i);
+				M0 = _mm_load_si128 ((const __m128i *)(padded.data()));
+				M1 = _mm_load_si128 ((const __m128i *)(padded.data() + 16));
+				tmp = _mm_xor_si128 (M0, M1);
+				update(M0, M1, tmp);
+				store1(padded.data(), i);
+				store2(padded.data(), i + 16);
+				::memcpy(out + i, padded.data(), inlen - i);
+			}
+
+			finish(aadlen, inlen, tag);
+
+			return tag;
+		}
+		else {
+			/* In random mode we can just use aes-ctr */
+			throw std::runtime_error("Tiaoxin does not support random mode");
+		}
+	}
+
+	virtual bool decrypt(const byte *aad, size_t aadlen, const byte *nonce,
+			size_t nlen, const byte *in, size_t inlen, byte *out,
+			const MacTag *tag) override
+	{
+		__m128i M0, M1, M2, M3, tmp;
+		alignas(32) std::array<byte, 32> padded;
+
+		auto test_tag = util::make_unique < MacTag >(taglen());
+		decltype(aadlen) i;
+		init(nonce, nlen);
+
+		for (i = 0; i + 64 <= aadlen; i += 64) {
+			M0 = _mm_load_si128 ((const __m128i *)(aad + i));
+			M1 = _mm_load_si128 ((const __m128i *)(aad + i + 16));
+			tmp = _mm_xor_si128 (M0, M1);
+			update(M0, M1, tmp);
+			M2 = _mm_load_si128 ((const __m128i *)(aad + i + 32));
+			M3 = _mm_load_si128 ((const __m128i *)(aad + i + 48));
+			tmp = _mm_xor_si128 (M2, M3);
+			update(M2, M3, tmp);
+		}
+		for (; i + 32 <= aadlen; i += 32) {
+			M0 = _mm_load_si128 ((const __m128i *)(aad + i));
+			M1 = _mm_load_si128 ((const __m128i *)(aad + i + 16));
+			tmp = _mm_xor_si128 (M0, M1);
+			update(M0, M1, tmp);
+		}
+
+		if (aadlen > i) {
+			padded.fill(0);
+			::memcpy(padded.data(), aad + i, aadlen - i);
+			M0 = _mm_load_si128 ((const __m128i *)(padded.data()));
+			M1 = _mm_load_si128 ((const __m128i *)(padded.data() + 16));
+			tmp = _mm_xor_si128 (M0, M1);
+			update(M0, M1, tmp);
+		}
+
+		/* Encryption stage */
+		for (i = 0; i + 64 <= inlen; i += 64) {
+			M0 = _mm_load_si128 ((const __m128i *)(in + i));
+			M1 = _mm_load_si128 ((const __m128i *)(in + i + 16));
+			tmp = _mm_xor_si128 (M0, M1);
+			update(M0, M1, tmp);
+			decrypt_round(M0, M1, out + i, out + i + 16);
+			M2 = _mm_load_si128 ((const __m128i *)(in + i + 32));
+			M3 = _mm_load_si128 ((const __m128i *)(in + i + 48));
+			tmp = _mm_xor_si128 (M2, M3);
+			update(M2, M3, tmp);
+			decrypt_round(M0, M1, out + i + 32, out + i + 48);
+		}
+		for (; i + 32 <= inlen; i += 32) {
+			M0 = _mm_load_si128 ((const __m128i *)(in + i));
+			M1 = _mm_load_si128 ((const __m128i *)(in + i + 16));
+			tmp = _mm_xor_si128 (M0, M1);
+			update(M0, M1, tmp);
+			decrypt_round(M0, M1, out + i, out + i + 16);
+		}
+
+		if (inlen > i) {
+			padded.fill(0);
+			::memcpy(padded.data(), in + i, inlen - i);
+			M0 = _mm_load_si128 ((const __m128i *)(padded.data()));
+			M1 = _mm_load_si128 ((const __m128i *)(padded.data() + 16));
+			tmp = _mm_xor_si128 (M0, M1);
+			update(M0, M1, tmp);
+			decrypt_round(M0, M1, padded.data(), padded.data() + 16);
+			::memcpy(out + i, padded.data(), inlen - i);
+		}
+
+		finish(aadlen, inlen, test_tag);
+
+		return sodium_memcmp(tag->data, test_tag->data, tag->datalen) == 0;
+	}
+
+	virtual size_t taglen() const override
+	{
+		return 16;
+	}
+	virtual size_t keylen() const override
+	{
+		return 16;
+	}
+
+	virtual size_t noncelen() const override
+	{
+		return 16;
+	}
+};
+
+#pragma GCC pop_options
+#endif
+
 class HPencAead::impl
 {
 public:
@@ -247,6 +585,13 @@ public:
 		}
 		else if (alg == AeadAlgorithm::CHACHA20_POLY_1305) {
 			cipher.reset(new Chacha20Poly1305AeadCipher(alg, random_mode));
+		}
+		else if (alg == AeadAlgorithm::TIAOXIN_346) {
+#ifdef HW_TIAOXIN
+			if (sodium_runtime_has_aesni()) {
+				cipher.reset(new Tiaoxin346AeadCipherOpt(alg, random_mode));
+			}
+#endif
 		}
 	}
 

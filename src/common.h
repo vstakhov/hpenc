@@ -58,7 +58,7 @@ static const int AeadKeyLengths[] = {
 	16,	// AES_GCM_128
 	32, // AES_GCM_256
 	32, // CHACHA20_POLY1305
-	32, // TIAOXIN_346
+	16, // TIAOXIN_346
 };
 
 // Maximum is 16 megabytes block
