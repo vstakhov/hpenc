@@ -49,7 +49,8 @@ public:
 	std::unique_ptr<HPEncNonce> nonce;
 	int fd_in, fd_out;
 	unsigned block_size;
-	std::vector<std::shared_ptr<aligned_vector> > io_bufs;
+	std::vector<std::shared_ptr<aligned_vector> > in_bufs;
+	std::vector<std::shared_ptr<aligned_vector> > out_bufs;
 	HPEncHeader hdr;
 	bool encode;
 	bool random_mode;
@@ -89,7 +90,8 @@ public:
 
 		encode = false;
 		pool.reset(new ThreadPool(nthreads));
-		io_bufs.resize(pool->size());
+		in_bufs.resize(pool->size());
+		out_bufs.resize(pool->size());
 		hdr.nonce = kdf->initialNonce();
 		auto klen = AeadKeyLengths[static_cast<int>(alg)];
 		auto key = kdf->genKey(klen);
@@ -101,8 +103,10 @@ public:
 				nonce.reset(new HPEncNonce(cipher->noncelen()));
 			}
 			ciphers.push_back(cipher);
-			io_bufs[i] = std::make_shared<aligned_vector>();
-			io_bufs[i]->resize(block_size + ciphers[0]->taglen());
+			in_bufs[i] = std::make_shared<aligned_vector>();
+			in_bufs[i]->resize(block_size);
+			out_bufs[i] = std::make_shared<aligned_vector>();
+			out_bufs[i]->resize(block_size + ciphers[0]->taglen());
 		}
 	}
 
@@ -117,20 +121,20 @@ public:
 		return hdr.toFd(fd_out, encode);
 	}
 
-	ssize_t writeBlock(ssize_t rd, aligned_vector *io_buf,
+	ssize_t writeBlock(ssize_t rd, aligned_vector *in_buf, aligned_vector *out_buf,
 			const std::vector<byte> &n, std::shared_ptr<HPencAead> const &cipher)
 	{
 		if (rd > 0) {
 			auto bs = htonl(rd);
 			auto tag = cipher->encrypt(reinterpret_cast<byte *>(&bs), sizeof(bs),
-					n.data(), n.size(), io_buf->data(), rd, io_buf->data());
+					n.data(), n.size(), in_buf->data(), rd, out_buf->data());
 
 			if (!random_mode) {
 				if (!tag) {
 					return -1;
 				}
 
-				auto mac_pos = io_buf->data() + rd;
+				auto mac_pos = out_buf->data() + rd;
 				std::copy(tag->data, tag->data + tag->datalen, mac_pos);
 				return rd + tag->datalen;
 			}
@@ -174,7 +178,7 @@ void HPEncEncrypt::encrypt(bool encode, unsigned count)
 			auto blocks_read = 0;
 			std::vector< std::future<ssize_t> > results;
 			auto i = 0U;
-			for (auto &buf : pimpl->io_bufs) {
+			for (auto &buf : pimpl->in_bufs) {
 				if (count > 0) {
 					if (remain == 0) {
 						last = true;
@@ -194,6 +198,7 @@ void HPEncEncrypt::encrypt(bool encode, unsigned count)
 					results.emplace_back(
 							pimpl->pool->enqueue(
 								&impl::writeBlock, pimpl.get(), rd, buf.get(),
+								pimpl->out_bufs[i].get(),
 								n, pimpl->ciphers[i]
 							));
 					blocks_read ++;
@@ -214,7 +219,7 @@ void HPEncEncrypt::encrypt(bool encode, unsigned count)
 				}
 				else {
 					if (rd > 0) {
-						const auto &io_buf = pimpl->io_bufs[i].get();
+						const auto &io_buf = pimpl->out_bufs[i].get();
 						if (encode) {
 							auto b64_out = util::base64Encode(io_buf->data(), rd);
 							if (util::atomicWrite(pimpl->fd_out,

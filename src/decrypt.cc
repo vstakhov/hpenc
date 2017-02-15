@@ -48,7 +48,8 @@ public:
 	std::unique_ptr<HPEncNonce> nonce;
 	int fd_in, fd_out;
 	unsigned block_size;
-	std::vector<std::shared_ptr <aligned_vector > > io_bufs;
+	std::vector<std::shared_ptr<aligned_vector > > in_bufs;
+	std::vector<std::shared_ptr<aligned_vector > > out_bufs;
 	std::vector <std::shared_ptr<HPencAead> > ciphers;
 	bool encode;
 	std::unique_ptr<ThreadPool> pool;
@@ -82,7 +83,8 @@ public:
 
 		encode = false;
 		pool.reset(new ThreadPool(nthreads));
-		io_bufs.resize(pool->size());
+		in_bufs.resize(pool->size());
+		out_bufs.resize(pool->size());
 	}
 
 	virtual ~impl()
@@ -113,8 +115,10 @@ public:
 				nonce.reset(new HPEncNonce(cipher->noncelen()));
 			}
 			ciphers.push_back(cipher);
-			io_bufs[i] = std::make_shared<aligned_vector>();
-			io_bufs[i]->resize(block_size + cipher->taglen());
+			in_bufs[i] = std::make_shared<aligned_vector>();
+			in_bufs[i]->resize(block_size + cipher->taglen());
+			out_bufs[i] = std::make_shared<aligned_vector>();
+			out_bufs[i]->resize(block_size);
 		}
 
 		return true;
@@ -125,7 +129,7 @@ public:
 		return util::atomicWrite(fd_out, io_buf->data(), rd) > 0;
 	}
 
-	ssize_t readBlock(size_t rd, aligned_vector *io_buf,
+	ssize_t readBlock(size_t rd, aligned_vector *in_buf, aligned_vector *out_buf,
 			const std::vector<byte> &n, std::shared_ptr<HPencAead> const &cipher)
 	{
 		if (rd > 0) {
@@ -138,12 +142,12 @@ public:
 				return -1;
 			}
 
-			tag.data = io_buf->data() + datalen;
+			tag.data = in_buf->data() + datalen;
 			tag.datalen = cipher->taglen();
 
 			if (!cipher->decrypt(reinterpret_cast<byte *>(&bs), sizeof(bs),
-					n.data(), n.size(), io_buf->data(), datalen,
-					&tag, io_buf->data())) {
+					n.data(), n.size(), in_buf->data(), datalen,
+					&tag, out_buf->data())) {
 				std::cerr << "Verification failed" << std::endl;
 				return -1;
 			}
@@ -186,7 +190,7 @@ void HPEncDecrypt::decrypt(bool encode, unsigned count) throw(std::runtime_error
 			auto blocks_read = 0;
 			std::vector< std::future<ssize_t> > results;
 			auto i = 0U;
-			for (auto &buf : pimpl->io_bufs) {
+			for (auto &buf : pimpl->in_bufs) {
 
 				auto rd = util::atomicRead(pimpl->fd_in,
 						buf->data(),
@@ -196,8 +200,8 @@ void HPEncDecrypt::decrypt(bool encode, unsigned count) throw(std::runtime_error
 					results.emplace_back(
 							pimpl->pool->enqueue(
 									&impl::readBlock, pimpl.get(),
-									rd, buf.get(), n,
-									pimpl->ciphers[i]
+									rd, buf.get(), pimpl->out_bufs[i].get(),
+									n, pimpl->ciphers[i]
 							));
 					blocks_read ++;
 					if (rd < pimpl->block_size) {
@@ -221,7 +225,7 @@ void HPEncDecrypt::decrypt(bool encode, unsigned count) throw(std::runtime_error
 					throw std::runtime_error("Cannot decrypt block");
 				}
 				if (rd > 0) {
-					if (!pimpl->writeBlock(rd, pimpl->io_bufs[i].get())) {
+					if (!pimpl->writeBlock(rd, pimpl->out_bufs[i].get())) {
 						throw std::runtime_error("Write error");
 					}
 				}
