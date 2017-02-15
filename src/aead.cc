@@ -281,7 +281,7 @@ private:
 	{
 		auto tmp = T4[0];
 
-		T4[0] = _mm_aesenc_si128(T4[2], M);
+		T4[0] = _mm_aesenc_si128(T4[3], M);
 		T4[3] = T4[2];
 		T4[2] = T4[1];
 		T4[1] = _mm_aesenc_si128(tmp, Z0);
@@ -292,7 +292,7 @@ private:
 	{
 		auto tmp = T6[0];
 
-		T6[0] = _mm_aesenc_si128(T6[2], M);
+		T6[0] = _mm_aesenc_si128(T6[5], M);
 		T6[5] = T6[4];
 		T6[4] = T6[3];
 		T6[3] = T6[2];
@@ -327,29 +327,34 @@ private:
 
 	inline void decrypt_round(__m128i C0, __m128i C1, byte *b1, byte *b2)
 	{
-		C0 = _mm_xor_si128(T3[1], _mm_xor_si128(_mm_and_si128(T6[2],T4[2]), C0));
-		C1 = _mm_xor_si128(T4[1], _mm_xor_si128(_mm_and_si128(T6[4],T3[1]), C1));
 		/* Modified update */
-		auto tmpM1 = _mm_aesenc_si128(T6[5], T6[0]);
-		auto tmpM0 = _mm_aesenc_si128(T3[2], T3[0]);
-		auto tmp = T4[1];
+		auto Mtmp0 = _mm_aesenc_si128(T3[2], T3[0]);
+		auto Mtmp1 = _mm_aesenc_si128(T6[5], T6[0]);
+		auto Mtmp2 = _mm_aesenc_si128(T4[3], T4[0]);
 
-		T4[1] = _mm_aesenc_si128(T4[0], Z0);
-		T4[0] = _mm_aesenc_si128(T4[3], T4[0]);
-		T4[3] = T4[2];
-		T4[2] = tmp;
 		T3[2] = T3[1];
 		T3[1] = _mm_aesenc_si128(T3[0], Z0);
-		T6[5] = T6[4]; T6[4] = T6[3]; T6[3] = T6[2]; T6[2] = T6[1];
-		T6[1] = _mm_aesenc_si128(T6[0], Z0);
-		T3[0] = _mm_xor_si128(T4[1], C0);
-		T6[0] = _mm_xor_si128(T3[1], C1);
-		tmpM0 = _mm_xor_si128(tmpM0, T3[0]);
-		tmpM1 = _mm_xor_si128(tmpM0, _mm_xor_si128(T6[0], tmpM1));
-		T4[0] = _mm_xor_si128(T4[0],tmpM1);
 
-		_mm_storeu_si128((__m128i *)b1, tmpM0);
-		_mm_storeu_si128((__m128i *)b2, tmpM1);
+		T4[3] = T4[2];
+		T4[2] = T4[1];
+		T4[1] = _mm_aesenc_si128(T4[0], Z0);
+
+		T6[5] = T6[4];
+		T6[4] = T6[3];
+		T6[3] = T6[2];
+		T6[2] = T6[1];
+		T6[1] = _mm_aesenc_si128(T6[0], Z0);
+
+		T3[0] = _mm_xor_si128(C0, _mm_xor_si128(T3[2], _mm_xor_si128(T4[1],
+				_mm_and_si128(T6[3], T4[3]))));
+		auto M0 = _mm_xor_si128(Mtmp0, T3[0]);
+		T6[0] = _mm_xor_si128(C1, _mm_xor_si128(T4[2], _mm_xor_si128(T3[1],
+				_mm_and_si128(T6[5], T3[2]))));
+		auto M1 = _mm_xor_si128(Mtmp1, _mm_xor_si128(T6[0], M0));
+		T4[0] = _mm_xor_si128(Mtmp2, M1);
+
+		_mm_storeu_si128((__m128i *)b1, M0);
+		_mm_storeu_si128((__m128i *)b2, M1);
 	}
 
 
@@ -461,12 +466,12 @@ public:
 			if (inlen > i) {
 				padded.fill(0);
 				::memcpy(padded.data(), in + i, inlen - i);
-				M0 = _mm_load_si128 ((const __m128i *)(padded.data()));
-				M1 = _mm_load_si128 ((const __m128i *)(padded.data() + 16));
-				tmp = _mm_xor_si128 (M0, M1);
-				update(M0, M1, tmp);
-				store1(padded.data(), i);
-				store2(padded.data(), i + 16);
+				M2 = _mm_load_si128 ((const __m128i *)(padded.data()));
+				M3 = _mm_load_si128 ((const __m128i *)(padded.data() + 16));
+				tmp = _mm_xor_si128 (M2, M3);
+				update(M2, M3, tmp);
+				store1(padded.data(), 0);
+				store2(padded.data(), 16);
 				::memcpy(out + i, padded.data(), inlen - i);
 			}
 
@@ -511,41 +516,81 @@ public:
 		if (aadlen > i) {
 			padded.fill(0);
 			::memcpy(padded.data(), aad + i, aadlen - i);
-			M0 = _mm_load_si128 ((const __m128i *)(padded.data()));
-			M1 = _mm_load_si128 ((const __m128i *)(padded.data() + 16));
-			tmp = _mm_xor_si128 (M0, M1);
-			update(M0, M1, tmp);
+			M2 = _mm_load_si128 ((const __m128i *)(padded.data()));
+			M3 = _mm_load_si128 ((const __m128i *)(padded.data() + 16));
+			tmp = _mm_xor_si128 (M2, M3);
+			update(M2, M3, tmp);
 		}
 
-		/* Encryption stage */
+		/* Decryption stage */
 		for (i = 0; i + 64 <= inlen; i += 64) {
 			M0 = _mm_load_si128 ((const __m128i *)(in + i));
 			M1 = _mm_load_si128 ((const __m128i *)(in + i + 16));
-			tmp = _mm_xor_si128 (M0, M1);
-			update(M0, M1, tmp);
 			decrypt_round(M0, M1, out + i, out + i + 16);
 			M2 = _mm_load_si128 ((const __m128i *)(in + i + 32));
 			M3 = _mm_load_si128 ((const __m128i *)(in + i + 48));
-			tmp = _mm_xor_si128 (M2, M3);
-			update(M2, M3, tmp);
-			decrypt_round(M0, M1, out + i + 32, out + i + 48);
+			decrypt_round(M2, M3, out + i + 32, out + i + 48);
 		}
+
 		for (; i + 32 <= inlen; i += 32) {
+#if 0
+			tmp = _mm_xor_si128(Z0, Z0);
 			M0 = _mm_load_si128 ((const __m128i *)(in + i));
 			M1 = _mm_load_si128 ((const __m128i *)(in + i + 16));
-			tmp = _mm_xor_si128 (M0, M1);
-			update(M0, M1, tmp);
+			update(tmp, tmp, tmp);
+			auto D0 = _mm_xor_si128(M0, _mm_xor_si128(T3[0],
+					_mm_xor_si128(T3[2], _mm_xor_si128(T4[1],
+							_mm_and_si128(T6[3], T4[3])))));
+			auto D1 = _mm_xor_si128(M0, _mm_xor_si128(T6[0],
+					_mm_xor_si128(T4[2], _mm_xor_si128(T3[1],
+						_mm_xor_si128(_mm_and_si128(T6[5], T3[2]), D0)))));
+			T3[0] = _mm_xor_si128(T3[0], D0);
+			T4[0] = _mm_xor_si128(T4[0], D0);
+			T6[0] = _mm_xor_si128(T6[0], _mm_xor_si128(D0, D1));
+			_mm_storeu_si128((__m128i *)(out + i), D0);
+			_mm_storeu_si128((__m128i *)(out + i + 16), D1);
+#endif
+			M0 = _mm_load_si128 ((const __m128i *)(in + i));
+			M1 = _mm_load_si128 ((const __m128i *)(in + i + 16));
 			decrypt_round(M0, M1, out + i, out + i + 16);
 		}
 
 		if (inlen > i) {
 			padded.fill(0);
 			::memcpy(padded.data(), in + i, inlen - i);
+			tmp = _mm_xor_si128(Z0, Z0);
 			M0 = _mm_load_si128 ((const __m128i *)(padded.data()));
 			M1 = _mm_load_si128 ((const __m128i *)(padded.data() + 16));
-			tmp = _mm_xor_si128 (M0, M1);
-			update(M0, M1, tmp);
-			decrypt_round(M0, M1, padded.data(), padded.data() + 16);
+
+			update(tmp, tmp, tmp);
+
+			auto D0 = _mm_xor_si128(M0, _mm_xor_si128(T3[0],
+					_mm_xor_si128(T3[2], _mm_xor_si128(T4[1],
+							_mm_and_si128(T6[3], T4[3])))));
+			if (inlen  - i <= 16 ){
+				_mm_storeu_si128((__m128i *)(padded.data()), D0);
+				::memset(padded.data() + (inlen  - i), 0,  16 - (inlen  - i));
+				D0 = _mm_load_si128 ((const __m128i *)(padded.data()));
+			}
+
+			auto D1 = _mm_xor_si128(M1, _mm_xor_si128(T6[0],
+					_mm_xor_si128(T4[2], _mm_xor_si128(T3[1],
+							_mm_xor_si128(_mm_and_si128(T6[5], T3[2]), D0)))));
+			if (inlen - i > 16) {
+				_mm_storeu_si128((__m128i *)padded.data(), D1);
+				::memset(padded.data() + (inlen  - i - 16), 0, 32 - (inlen - i));
+				D1 = _mm_load_si128 ((const __m128i *)(padded.data()));
+			}
+			else{
+				D1 = tmp;
+			}
+
+			T3[0] = _mm_xor_si128(T3[0], D0);
+			T4[0] = _mm_xor_si128(T4[0], D1);
+			T6[0] = _mm_xor_si128(T6[0], _mm_xor_si128(D0, D1));
+			_mm_storeu_si128((__m128i *)(padded.data()), D0);
+			_mm_storeu_si128((__m128i *)(padded.data() + 16), D1);
+
 			::memcpy(out + i, padded.data(), inlen - i);
 		}
 
