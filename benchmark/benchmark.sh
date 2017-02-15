@@ -1,7 +1,7 @@
 #!/bin/sh
 
 HPENC=${HPENC:-"./src/hpenc"}
-ALGORITHMS="aes-128 aes-256 chacha20"
+ALGORITHMS="aes-128 aes-256 chacha20 tiaoxin"
 BLOCK_SIZES="4096 65536 524288 1048576 8388608 16777216"
 DATA_SIZE="2147483648"
 
@@ -17,7 +17,7 @@ fi
 
 # Block size tests
 echo "Block size encrypt test (all cores). bytes : mbits/second"
-printf "Block\tAES-128\tAES-256\tChacha\n"
+printf "Block\tAES-128\tAES-256\tChacha\tTiaoxin\n"
 for _b in $BLOCK_SIZES ; do
 	printf "$_b\t"
 	_cnt=$(($DATA_SIZE / $_b))
@@ -31,7 +31,7 @@ done
 
 # CPU count tests
 echo "CPU cores encrypt test (16M block). core count : mbits/second"
-printf "Cores\tAES-128\tAES-256\tChacha\n"
+printf "Cores\tAES-128\tAES-256\tChacha\tTiaoxin\n"
 for _b in `seq $NCPU` ; do
 	_cnt=$(($DATA_SIZE / 16777216))
 	printf "$_b\t"
