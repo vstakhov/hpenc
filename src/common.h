@@ -50,19 +50,21 @@ using SessionKey = std::vector<byte>;
 enum class AeadAlgorithm {
 	AES_GCM_128 = 0,
 	AES_GCM_256,
-	CHACHA20_POLY_1305
+	CHACHA20_POLY_1305,
+	TIAOXIN_346,
 };
 
 static const int AeadKeyLengths[] = {
 	16,	// AES_GCM_128
 	32, // AES_GCM_256
-	32 // CHACHA20_POLY1305
+	32, // CHACHA20_POLY1305
+	32, // TIAOXIN_346
 };
 
 // Maximum is 16 megabytes block
 const unsigned max_block = 16 * 1024 * 1024;
 
-const unsigned master_key_length = 32; // CHACHA20_POLY1305
+const unsigned master_key_length = 32; // XCHACHA20
 
 const char rndfile[] = "/dev/urandom";
 
