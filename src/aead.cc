@@ -232,6 +232,7 @@ public:
 	}
 };
 
+#if defined(_M_AMD64) || defined(__x86_64__) || defined(__amd64__)
 #if defined(_MSC_VER) && _MSC_VER >= 1600 || defined(__GNUC__)
 #define HW_TIAOXIN 1
 
@@ -616,6 +617,7 @@ public:
 
 #pragma GCC pop_options
 #endif
+#endif
 
 class HPencAead::impl
 {
@@ -636,6 +638,13 @@ public:
 			if (sodium_runtime_has_aesni()) {
 				cipher.reset(new Tiaoxin346AeadCipherOpt(alg, random_mode));
 			}
+      else {
+        // XXX: add some warning
+			  cipher.reset(new OpenSSLAeadCipher(AeadAlgorithm::AES_GCM_128, random_mode));
+      }
+#else
+    // XXX: add some warning
+		cipher.reset(new OpenSSLAeadCipher(AeadAlgorithm::AES_GCM_128, random_mode));
 #endif
 		}
 	}
