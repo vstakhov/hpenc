@@ -68,16 +68,16 @@ public:
 class OpenSSLAeadCipher: public AeadCipher
 {
 private:
-	std::unique_ptr<EVP_CIPHER_CTX> ctx_enc;
-	std::unique_ptr<EVP_CIPHER_CTX> ctx_dec;
+	EVP_CIPHER_CTX *ctx_enc;
+	EVP_CIPHER_CTX *ctx_dec;
 	const EVP_CIPHER *alg;
 	AeadAlgorithm alg_num;
 public:
 	OpenSSLAeadCipher(AeadAlgorithm _alg, bool _rm)
 		: AeadCipher(_rm)
 	{
-		ctx_enc.reset(EVP_CIPHER_CTX_new());
-		ctx_dec.reset(EVP_CIPHER_CTX_new());
+		ctx_enc = EVP_CIPHER_CTX_new();
+		ctx_dec = EVP_CIPHER_CTX_new();
 
 		switch(_alg) {
 		case AeadAlgorithm::AES_GCM_128:
@@ -90,18 +90,24 @@ public:
 			alg = nullptr;
 			break;
 		}
-		EVP_EncryptInit_ex(ctx_enc.get(), alg, NULL, NULL, NULL);
-		EVP_DecryptInit_ex(ctx_dec.get(), alg, NULL, NULL, NULL);
+		EVP_EncryptInit_ex(ctx_enc, alg, NULL, NULL, NULL);
+		EVP_DecryptInit_ex(ctx_dec, alg, NULL, NULL, NULL);
 
 		alg_num = _alg;
 	}
+
+  virtual ~OpenSSLAeadCipher() 
+  {
+    EVP_CIPHER_CTX_free(ctx_enc);
+    EVP_CIPHER_CTX_free(ctx_dec);
+  }
 
 	virtual std::unique_ptr<MacTag> encrypt(const byte *aad, size_t aadlen,
 			const byte *nonce, size_t nlen, const byte *in, size_t inlen,
 			byte *out) override
 	{
 		int howmany = 0;
-		auto ctx_ptr = ctx_enc.get();
+		auto ctx_ptr = ctx_enc;
 
 		// Set nonce length
 		EVP_CIPHER_CTX_ctrl(ctx_ptr, EVP_CTRL_GCM_SET_IVLEN, nlen, NULL);
@@ -132,7 +138,7 @@ public:
 			const MacTag *tag) override
 	{
 		int howmany = 0;
-		auto ctx_ptr = ctx_enc.get();
+		auto ctx_ptr = ctx_enc;
 		// Set nonce and key
 		EVP_CIPHER_CTX_ctrl(ctx_ptr, EVP_CTRL_GCM_SET_IVLEN, nlen, NULL);
 		EVP_DecryptInit_ex(ctx_ptr, NULL, NULL, key->data(),
@@ -233,7 +239,7 @@ public:
 };
 
 #if defined(_M_AMD64) || defined(__x86_64__) || defined(__amd64__)
-#if defined(_MSC_VER) && _MSC_VER >= 1600 || defined(__GNUC__)
+#if defined(_MSC_VER) && _MSC_VER >= 1600 || (defined(__GNUC__) && !defined(__clang__))
 #define HW_TIAOXIN 1
 
 #pragma GCC push_options

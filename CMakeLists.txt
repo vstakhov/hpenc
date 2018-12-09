@@ -2,6 +2,7 @@
 cmake_minimum_required(VERSION 2.8.0 FATAL_ERROR)
 
 project(hpenc CXX)
+set(HPENC_VERSION "3.0")
 
 macro(use_cxx11)
   if (CMAKE_VERSION VERSION_LESS "3.1")
@@ -32,6 +33,8 @@ set(SOURCES "src/aead.cc"
 	"src/nonce.cc"
 	"src/util.cc")
 add_executable(hpenc ${SOURCES})
+
 target_link_libraries(hpenc ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(hpenc ${LIBS})
+set_target_properties(hpenc PROPERTIES VERSION ${HPENC_VERSION})
 install(TARGETS hpenc DESTINATION bin)
