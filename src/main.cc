@@ -37,7 +37,7 @@ using namespace hpenc;
 
 static void usage(char **argv)
 {
-	std::cerr 	<< "Usage: " << argv[0] << " [-h] [-d] [-a algorithm] [-k key|-p] [-l]"
+	std::cerr 	<< "Usage: " << argv[0] << " [-h] [-d] [-a algorithm] [-k key|-p|-K env_var] [-l]"
 				<< "[-b block_size] [-B] [-r] [-c count] [psk]"
 				<< std::endl
 				<< "Available options: " << std::endl
@@ -45,6 +45,7 @@ static void usage(char **argv)
 				<< "  -a <algorithm>       Use specified algorithm: chacha20," << std::endl
 				<< "                       aes-128 or aes-256 or tiaoxin" << std::endl
 				<< "  -k <key>             52 bytes hex encoded pre-shared key" << std::endl
+				<< "  -K <env_var>         environment variable containing pre-shared key" << std::endl
 				<< "  -p                   Read password from the terminal instead of key" << std::endl
 				<< "  -l                   Use legacy pbkdf method" << std::endl
 				<< "  -b <block_size>      Block size to use (default: 4K)" << std::endl
@@ -84,8 +85,9 @@ int main(int argc, char **argv)
 	bool legacy_pbkdf = false;
 	unsigned count = 0;
 	unsigned nthreads = 0;
+	std::string key_base32;
 
-	while ((opt = ::getopt(argc, argv, "ha:b:plk:Bdn:rc:")) != -1) {
+	while ((opt = ::getopt(argc, argv, "ha:b:plk:K:Bdn:rc:")) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv);
@@ -118,7 +120,27 @@ int main(int argc, char **argv)
 					<< std::endl;
 				exit(EXIT_FAILURE);
 			}
-			std::string key_base32(optarg);
+			key_base32.assign (optarg);
+			auto decoded = util::base32DecodeKey(key_base32);
+			if (!decoded || decoded->size() != master_key_length) {
+				usage(argv);
+			}
+			psk = std::move(decoded);
+			break;
+		}
+		case 'K':
+		{
+			if (psk) {
+				std::cerr << "Key/password has been already specified"
+					<< std::endl;
+				exit(EXIT_FAILURE);
+			}
+			if (getenv(optarg)==NULL) {
+				std::cerr << "Key env_var not found"
+					<< std::endl;
+				exit(EXIT_FAILURE);
+			}
+			key_base32.assign (getenv(optarg));
 			auto decoded = util::base32DecodeKey(key_base32);
 			if (!decoded || decoded->size() != master_key_length) {
 				usage(argv);
