@@ -85,8 +85,9 @@ int main(int argc, char **argv)
 	bool legacy_pbkdf = false;
 	unsigned count = 0;
 	unsigned nthreads = 0;
+	std::string key_base32;
 
-	while ((opt = ::getopt(argc, argv, "ha:b:plkK:Bdn:rc:")) != -1) {
+	while ((opt = ::getopt(argc, argv, "ha:b:plk:K:Bdn:rc:")) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv);
@@ -119,7 +120,7 @@ int main(int argc, char **argv)
 					<< std::endl;
 				exit(EXIT_FAILURE);
 			}
-			std::string key_base32(optarg);
+			key_base32.assign (optarg);
 			auto decoded = util::base32DecodeKey(key_base32);
 			if (!decoded || decoded->size() != master_key_length) {
 				usage(argv);
@@ -139,7 +140,7 @@ int main(int argc, char **argv)
 					<< std::endl;
 				exit(EXIT_FAILURE);
 			}
-			std::string key_base32(getenv(optarg));
+			key_base32.assign (getenv(optarg));
 			auto decoded = util::base32DecodeKey(key_base32);
 			if (!decoded || decoded->size() != master_key_length) {
 				usage(argv);
