@@ -51,6 +51,9 @@ For pseudo-random generator the following invocation could be used:
 -k *key*
 :	Use the specified *key* for encryption/decryption. Key is required for decryption and optional for encryption. The size of PSK is 52 base32 encoded symbols.
 
+-K *env_var*
+:	Read key for encryption/decryption from the specified *environment variable*. Key is required for decryption and optional for encryption. The size of PSK is 52 base32 encoded symbols.
+
 -B
 :	Encode output or input to base64
 
