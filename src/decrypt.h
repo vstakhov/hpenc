@@ -27,6 +27,7 @@
 
 #include <memory>
 #include <string>
+#include <stdexcept>
 #include "common.h"
 
 namespace hpenc
