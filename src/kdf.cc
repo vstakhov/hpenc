@@ -25,6 +25,7 @@
 #include "kdf.h"
 #include "nonce.h"
 #include "util.h"
+#include <stdexcept>
 #include <sodium.h>
 #include <openssl/evp.h>
 

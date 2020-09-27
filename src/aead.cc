@@ -26,6 +26,7 @@
 #include <sodium.h>
 #include <cstring>
 #include <array>
+#include <stdexcept>
 #include "aead.h"
 #include "util.h"
 

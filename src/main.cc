@@ -31,6 +31,7 @@
 #include <unistd.h>
 #include <iostream>
 #include <cstdlib>
+#include <stdexcept>
 #include <sodium.h>
 
 using namespace hpenc;
